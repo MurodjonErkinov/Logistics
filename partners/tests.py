@@ -77,3 +77,22 @@ class PartnersTests(TestCase):
         member = CompanyMember.objects.get(company_id=first_id, user=self.owner)
         response = self.client.get(f"/api/partners/companies/{second_id}/members/{member.pk}/")
         self.assertEqual(response.status_code, 404)
+
+    def test_my_companies_exposes_membership_without_granting_permissions(self):
+        company_id = self.create_company()
+        owner_data = self.client.get("/api/partners/companies/?mine=1").data
+        self.assertEqual(owner_data[0]["my_role"], "owner")
+        self.assertTrue(owner_data[0]["can_post_cargo"])
+        self.as_user(self.outsider)
+        self.assertEqual(self.client.get("/api/partners/companies/?mine=1").data, [])
+        CompanyMember.objects.create(company_id=company_id, user=self.member, can_post_cargo=False)
+        self.as_user(self.member)
+        member_data = self.client.get("/api/partners/companies/?mine=1").data
+        self.assertEqual(member_data[0]["my_role"], "member")
+        self.assertFalse(member_data[0]["can_post_cargo"])
+
+    def test_outsider_cannot_read_company_contacts(self):
+        company_id = self.create_company()
+        self.as_user(self.outsider)
+        self.assertEqual(self.client.get("/api/partners/companies/").data, [])
+        self.assertEqual(self.client.get(f"/api/partners/companies/{company_id}/").status_code, 404)

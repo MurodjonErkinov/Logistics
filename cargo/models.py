@@ -1,10 +1,11 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 from partners.models import Company
+from .vehicle_catalog import BODY_CHOICES, SIZE_CHOICES
 
 
 phone_validator = RegexValidator(
@@ -24,7 +25,13 @@ class Load(models.Model):
 
     origin = models.CharField(max_length=150)
     destination = models.CharField(max_length=150)
+    origin_lat = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)])
+    origin_lon = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)])
+    destination_lat = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, validators=[MinValueValidator(-90), MaxValueValidator(90)])
+    destination_lon = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, validators=[MinValueValidator(-180), MaxValueValidator(180)])
     cargo_name = models.CharField(max_length=255)
+    vehicle_kind = models.CharField(max_length=30, choices=BODY_CHOICES, blank=True, default="")
+    vehicle_size = models.CharField(max_length=10, choices=SIZE_CHOICES, blank=True, default="")
     vehicle_type = models.CharField(max_length=120)
     weight_tons = models.DecimalField(max_digits=9, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
     is_price_negotiable = models.BooleanField(default=True)
@@ -32,6 +39,7 @@ class Load(models.Model):
         max_digits=14, decimal_places=2, null=True, blank=True,
         validators=[MinValueValidator(Decimal("0.01"))],
     )
+    price_basis = models.CharField(max_length=8, default="trip", choices=[("trip", "Per trip"), ("ton", "Per ton")])
     currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.UZS)
     contact_phone = models.CharField(max_length=16, validators=[phone_validator])
     alternate_phone = models.CharField(max_length=16, blank=True, validators=[phone_validator])

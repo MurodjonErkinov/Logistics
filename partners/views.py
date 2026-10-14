@@ -12,9 +12,15 @@ def is_owner(company, user):
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
-    queryset = Company.objects.select_related("created_by").all().order_by("id")
+    queryset = Company.objects.select_related("created_by").prefetch_related("memberships").all().order_by("id")
     serializer_class = CompanySerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action in ("list", "retrieve") and (not self.request.user.is_staff or self.request.query_params.get("mine") == "1"):
+            queryset = queryset.filter(memberships__user=self.request.user)
+        return queryset
 
     @transaction.atomic
     def perform_create(self, serializer):

@@ -1,0 +1,80 @@
+export type Place = {
+  name: string;
+  lat?: number | null;
+  lon?: number | null;
+  radius_km?: number;
+  min_price?: string;
+  eta_hours?: number;
+  priority?: number;
+};
+export type Vehicle = {
+  id: number;
+  name: string;
+  kind: string;
+  size_class?: string;
+  capacity_tons: string;
+  volume_m3: string | null;
+  plate: string;
+};
+export type Ticket = {
+  id: number;
+  title: string;
+  vehicle: number;
+  vehicle_name: string;
+  status: string;
+  current_location: Place | Record<string, never>;
+  origins: Place[];
+  destinations: Place[];
+  waypoints: Place[];
+  route_mode: string;
+  ready_at: string;
+  expires_at: string;
+  available_tons: string;
+  partial_load: boolean;
+  min_price: string;
+  currency: string;
+  price_basis: string;
+  match_mode: string;
+  notes: string;
+};
+export type Preferences = {
+  telegram_enabled: boolean;
+  partial_interval_minutes: number;
+  quiet_start: string | null;
+  quiet_end: string | null;
+  timezone: string;
+  language: string;
+  telegram_connected?: boolean;
+  telegram_blocked?: boolean;
+  bot_configured?: boolean;
+};
+export type DriverNotification = {
+  id: number;
+  ticket: number;
+  ticket_title: string;
+  load: number | null;
+  kind: string;
+  size_class?: string;
+  level: string;
+  snapshot: {
+    load_id?: number;
+    origin?: string;
+    destination?: string;
+    cargo_name?: string;
+    phone?: string;
+    price?: string | null;
+    currency?: string;
+    price_basis?: string;
+    weight_tons?: string;
+  };
+  reasons: {
+    checks?: Record<string, boolean | null>;
+    distance_km?: number | null;
+    priority?: number;
+  };
+  read_at: string | null;
+  created_at: string;
+  obsolete: boolean;
+  sent_at: string | null;
+  delivery_error: string;
+};

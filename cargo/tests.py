@@ -84,3 +84,23 @@ class LoadTests(TestCase):
         priced = self.client.post("/api/cargo/loads/", {**self.payload, "is_price_negotiable": False, "price_amount": "3000000"})
         self.assertEqual(priced.status_code, 201)
         self.assertIn("3 000 000 UZS", priced.data["display_text"])
+
+    def test_public_contacts_are_hidden_and_mine_is_scoped(self):
+        self.as_user(self.outsider)
+        created = self.client.post("/api/cargo/loads/", self.payload)
+        own_id = created.data["id"]
+        self.as_user(self.owner)
+        company_load = self.client.post("/api/cargo/loads/", {**self.payload, "company": self.company.pk})
+        own = self.client.get("/api/cargo/loads/?mine=1")
+        self.assertEqual([item["id"] for item in own.data], [company_load.data["id"]])
+        self.client.force_authenticate(user=None)
+        public = self.client.get(f"/api/cargo/loads/{own_id}/")
+        self.assertEqual(public.data["contact_phone"], "")
+        self.assertEqual(public.data["alternate_phone"], "")
+        self.assertEqual(public.data["display_text"], "")
+        self.assertEqual(self.client.get("/api/cargo/loads/?mine=1").status_code, 401)
+        self.as_user(self.outsider)
+        private = self.client.get(f"/api/cargo/loads/{own_id}/")
+        self.assertEqual(private.data["contact_phone"], self.payload["contact_phone"])
+        self.client.patch(f"/api/cargo/loads/{own_id}/", {"status": "closed"})
+        self.assertNotIn(own_id, [item["id"] for item in self.client.get("/api/cargo/loads/?status=open").data])

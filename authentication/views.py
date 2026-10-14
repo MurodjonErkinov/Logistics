@@ -4,11 +4,24 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .serializers import ProfileSerializer, RegistrationSerializer, UserSerializer
+from .throttles import AuthAddressThrottle, LoginAccountThrottle, RegistrationThrottle, RefreshThrottle
+
+from .serializers import ProfileSerializer, RegistrationSerializer, UserSerializer, SecureTokenRefreshSerializer
+
+
+class LoginView(TokenObtainPairView):
+    throttle_classes = [LoginAccountThrottle, AuthAddressThrottle]
+
+
+class RefreshView(TokenRefreshView):
+    serializer_class = SecureTokenRefreshSerializer
+    throttle_classes = [RefreshThrottle]
 
 
 class RegisterView(generics.CreateAPIView):
+    throttle_classes = [RegistrationThrottle]
     serializer_class = RegistrationSerializer
     permission_classes = [permissions.AllowAny]
     authentication_classes = []

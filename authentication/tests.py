@@ -7,6 +7,8 @@ from rest_framework.test import APIClient
 
 class AuthenticationTests(TestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         self.client = APIClient()
         self.user = get_user_model().objects.create_user(username="driver", password="StrongPass123!")
 
@@ -77,3 +79,24 @@ class AuthenticationTests(TestCase):
     def test_custom_user_model(self):
         self.assertTrue(issubclass(get_user_model(), AbstractUser))
         self.assertEqual(settings.AUTH_USER_MODEL, "authentication.User")
+
+    def test_password_change_requires_current_password_and_revokes_tokens(self):
+        from django.core.cache import cache
+        cache.clear()
+        tokens = self.login()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+        self.assertEqual(self.client.patch("/api/auth/me/", {"password": "UpdatedStrongPass!2026"}).status_code, 400)
+        changed = self.client.patch("/api/auth/me/", {"password": "UpdatedStrongPass!2026", "current_password": "StrongPass123!"})
+        self.assertEqual(changed.status_code, 200)
+        self.assertNotIn("current_password", changed.data)
+        self.assertEqual(self.client.get("/api/auth/me/").status_code, 401)
+        self.client.credentials()
+        self.assertEqual(self.client.post("/api/auth/refresh/", {"refresh": tokens["refresh"]}).status_code, 401)
+
+    def test_login_attempts_are_limited(self):
+        from django.core.cache import cache
+        cache.clear()
+        for _ in range(5):
+            self.assertEqual(self.client.post("/api/auth/login/", {"username": "nonexistent", "password": "wrong"}).status_code, 401)
+        self.assertEqual(self.client.post("/api/auth/login/", {"username": "nonexistent", "password": "wrong"}).status_code, 429)
+        cache.clear()

@@ -19,6 +19,8 @@ INSTALLED_APPS = [
     "authentication",
     "partners",
     "cargo",
+    "telegram_import",
+    "driver_notifications",
 ]
 AUTH_USER_MODEL = "authentication.User"
 MIDDLEWARE = [
@@ -66,6 +68,7 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    "CHECK_REVOKE_TOKEN": True,
 }
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Tashkent"
@@ -74,3 +77,7 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 65536
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"

@@ -1,0 +1,107 @@
+name: logistics-prod
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: deploy/Dockerfile
+  image: logistics-prod-backend:latest
+  env_file: ${LOGISTICS_ENV_FILE:-.env.production}
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings_production
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 45s
+  depends_on:
+    db:
+      condition: service_healthy
+    cache:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  cache:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --save '' --appendonly no --maxmemory 128mb --maxmemory-policy noeviction"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  web:
+    <<: *backend
+    command: sh -c 'python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 60 --access-logfile - --error-logfile -'
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+  frontend:
+    build: ./frontend
+    image: logistics-prod-frontend:latest
+    restart: unless-stopped
+    init: true
+    environment:
+      BACKEND_URL: http://web:8000
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:?Set PUBLIC_SITE_URL}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3018}:3000"
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+  driver_worker:
+    <<: *backend
+    command: python manage.py driver_worker
+    depends_on:
+      web:
+        condition: service_healthy
+  telegram_cleanup:
+    <<: *backend
+    command: python manage.py telegram_cleanup --watch
+    depends_on:
+      web:
+        condition: service_healthy
+  telegram_importer:
+    <<: *backend
+    profiles: [telegram]
+    command: python manage.py telegram_watch
+    volumes:
+      - telegram_session:/app/.telegram_session
+    depends_on:
+      web:
+        condition: service_healthy
+  driver_bot:
+    <<: *backend
+    profiles: [driver-bot]
+    command: python manage.py driver_bot
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  telegram_session:

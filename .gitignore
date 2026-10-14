@@ -7,4 +7,12 @@ staticfiles/
 media/
 .coverage
 .pytest_cache/
+*.session
+*.session-journal
 api.txt
+.ai-stack.lock
+.env.production
+backups/
+DEPLOYMENT.md
+DRIVER_NOTIFICATIONS.md
+TELEGRAM_IMPORT.md

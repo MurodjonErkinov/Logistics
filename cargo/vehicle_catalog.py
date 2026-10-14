@@ -1,0 +1,2 @@
+BODY_CHOICES = [('tent', 'Tent'), ('van', 'Furgon'), ('refrigerator', 'Refrijerator'), ('isothermal', 'Izotermik'), ('flatbed', 'Bort / platforma'), ('tanker', 'Sisterna'), ('dump', 'Samosval'), ('lowbed', 'Tral'), ('container', 'Konteyner'), ('other', 'Boshqa')]
+SIZE_CHOICES = [('S', 'S'), ('M', 'M'), ('L', 'L'), ('XL', 'XL'), ('XXL', 'XXL'), ('3XL', '3XL'), ('FURA', 'FURA'), ('CUSTOM', 'CUSTOM')]

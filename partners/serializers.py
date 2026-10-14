@@ -7,11 +7,28 @@ from .models import Company, CompanyMember
 class CompanySerializer(serializers.ModelSerializer):
     created_by_username = serializers.CharField(source="created_by.username", read_only=True)
 
+    my_role = serializers.SerializerMethodField()
+    can_post_cargo = serializers.SerializerMethodField()
+
+    def membership(self, obj):
+        user = self.context["request"].user
+        return next((member for member in obj.memberships.all() if member.user_id == user.pk), None)
+
+    def get_my_role(self, obj):
+        member = self.membership(obj)
+        return member.role if member else None
+
+    def get_can_post_cargo(self, obj):
+        if self.context["request"].user.is_staff:
+            return True
+        member = self.membership(obj)
+        return bool(member and (member.role == CompanyMember.Role.OWNER or member.can_post_cargo))
+
     class Meta:
         model = Company
         fields = (
             "id", "name", "phone_number", "email", "address", "created_by",
-            "created_by_username", "created_at", "updated_at",
+            "created_by_username", "created_at", "updated_at", "my_role", "can_post_cargo",
         )
         read_only_fields = ("id", "created_by", "created_by_username", "created_at", "updated_at")
 
