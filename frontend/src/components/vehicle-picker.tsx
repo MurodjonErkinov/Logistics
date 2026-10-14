@@ -1,4 +1,5 @@
 "use client";
+import { appPath } from "@/lib/paths";
 import Image from "next/image";
 import { Truck } from "lucide-react";
 import { useState } from "react";
@@ -83,7 +84,7 @@ export function VehiclePicker({
         <div className="vehicle-image-stage">
           {imageSize ? (
             <Image
-              src={`/images/vehicles/${imageSize.toLowerCase()}.webp`}
+              src={appPath(`/images/vehicles/${imageSize.toLowerCase()}.webp`)}
               alt={`${imageSize} — ${t("Transport tanlash")}`}
               width={773}
               height={479}

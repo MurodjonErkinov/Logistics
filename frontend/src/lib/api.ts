@@ -1,3 +1,4 @@
+import { appPath } from "./paths";
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -18,7 +19,7 @@ export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`/api/${path.replace(/^\//, "")}`, {
+  const response = await fetch(appPath(`/api/${path.replace(/^\//, "")}`), {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
     credentials: "same-origin",

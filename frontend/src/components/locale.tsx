@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState } from "react";
+import { cookiePath } from "@/lib/paths";
 import russian from "@/i18n/ru.json";
 export type Locale = "uz" | "ru";
 const dictionary: Record<string, string> = russian;
@@ -40,7 +41,7 @@ export function LocaleProvider({
       value === "ru"
         ? "YukFlow — Грузы по вашему маршруту"
         : "YukFlow — Yo‘lingizga mos yuk";
-    document.cookie = `yf_locale=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    document.cookie = `yf_locale=${value}; Path=${cookiePath}; Max-Age=31536000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
   }, []);
   const t = useCallback(
     (text: string) =>

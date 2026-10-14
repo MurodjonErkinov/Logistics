@@ -1,3 +1,4 @@
+import { cookiePath } from "@/lib/paths";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ function setTokens(
     secure:
       process.env.NODE_ENV === "production" ||
       request.nextUrl.protocol === "https:",
-    path: "/",
+    path: cookiePath,
   };
   response.cookies.set("yf_access", tokens.access, {
     ...options,
@@ -32,8 +33,8 @@ function setTokens(
     });
 }
 function clearTokens(response: NextResponse) {
-  response.cookies.set("yf_access", "", { path: "/", maxAge: 0 });
-  response.cookies.set("yf_refresh", "", { path: "/", maxAge: 0 });
+  response.cookies.set("yf_access", "", { path: cookiePath, maxAge: 0 });
+  response.cookies.set("yf_refresh", "", { path: cookiePath, maxAge: 0 });
 }
 async function renew(
   refresh: string,

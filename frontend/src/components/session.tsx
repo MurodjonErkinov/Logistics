@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { appPath } from "@/lib/paths";
 import { api } from "@/lib/api";
 import type { User } from "@/lib/types";
 
@@ -43,7 +44,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   async function logout() {
     await api("auth/logout/", { method: "POST", body: "{}" });
     setUser(null);
-    window.location.assign("/");
+    window.location.assign(appPath("/"));
   }
   return (
     <Context.Provider value={{ user, loading, reload, logout }}>

@@ -1,4 +1,5 @@
 "use client";
+import { appPath } from "@/lib/paths";
 import { useLocale } from "@/components/locale";
 
 import { useState } from "react";
@@ -31,7 +32,7 @@ function Content() {
     try {
       await api("auth/me/", { method: "PATCH", body: JSON.stringify(data) });
       if (data.password) {
-        window.location.assign("/login?password_changed=1");
+        window.location.assign(appPath("/login?password_changed=1"));
         return;
       }
       await reload();
