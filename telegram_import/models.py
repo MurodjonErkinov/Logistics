@@ -18,7 +18,7 @@ class TelegramPost(models.Model):
     posted_at = models.DateTimeField()
     expires_at = models.DateTimeField()
     status = models.CharField(max_length=10, choices=Status.choices)
-    provider = models.CharField(max_length=10, choices=(("openai", "OpenAI"), ("ollama", "Ollama")), default="openai")
+    provider = models.CharField(max_length=10, choices=(("openai", "OpenAI"),), default="openai")
     detail = models.TextField(blank=True)
     retry_at = models.DateTimeField(null=True, blank=True, db_index=True)
     imported_at = models.DateTimeField(auto_now_add=True)

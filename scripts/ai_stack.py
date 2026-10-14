@@ -30,8 +30,8 @@ def read_env():
     return values
 
 
-def save_selection(provider, ollama):
-    updates = {"TELEGRAM_AI_PROVIDER": provider, **ollama}
+def save_selection(provider):
+    updates = {"TELEGRAM_AI_PROVIDER": provider}
     lines = []
     for line in ENV_FILE.read_text().splitlines():
         key = line.partition("=")[0].strip()
@@ -57,11 +57,9 @@ def save_selection(provider, ollama):
 def start_stack(action, provider=None, compose="docker compose"):
     values = read_env()
     provider = provider or os.getenv("TELEGRAM_AI_PROVIDER", values.get("TELEGRAM_AI_PROVIDER", "openai"))
-    if provider not in ("openai", "ollama"):
-        raise ValueError("Select openai or ollama")
-    defaults = {"OLLAMA_BASE_URL": "http://ollama:11434", "OLLAMA_MODEL": "qwen3:4b", "OLLAMA_TIMEOUT_SECONDS": "600"}
-    ollama = {key: os.getenv(key, values.get(key, default)) for key, default in defaults.items()}
-    environment = {**os.environ, "TELEGRAM_AI_PROVIDER": provider, **ollama}
+    if provider != "openai":
+        raise ValueError("Only the OpenAI parser is supported")
+    environment = {**os.environ, "TELEGRAM_AI_PROVIDER": provider}
     prefix = shlex.split(compose)
 
     def run(*arguments):
@@ -69,11 +67,6 @@ def start_stack(action, provider=None, compose="docker compose"):
 
     if action == "build":
         run("build", "web")
-    managed_ollama = provider == "ollama" and ollama["OLLAMA_BASE_URL"].rstrip("/") == "http://ollama:11434"
-    if managed_ollama:
-        run("--profile", "ollama", "up", "-d", "--wait", "ollama")
-        if action == "build":
-            run("exec", "-T", "ollama", "ollama", "pull", ollama["OLLAMA_MODEL"])
     configured = all(values.get(key) for key in ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_GROUP"))
     if configured:
         run("run", "--rm", "--no-deps", "-T", "telegram_importer", "python", "manage.py", "check_ai_provider")
@@ -81,11 +74,9 @@ def start_stack(action, provider=None, compose="docker compose"):
     run("up", "-d", "--wait", "--force-recreate", "web")
     run("exec", "-T", "web", "python", "manage.py", "migrate", "--noinput")
     run("up", "-d", "--no-deps", "--force-recreate", "telegram_cleanup", "driver_worker")
-    save_selection(provider, ollama)
+    save_selection(provider)
     if configured:
         run("--profile", "telegram", "up", "-d", "--no-deps", "--force-recreate", "telegram_importer")
-    if not managed_ollama:
-        run("--profile", "ollama", "stop", "ollama")
     print(f"Selected AI provider: {provider}", flush=True)
     if not configured:
         print("Backend is running. Configure Telegram credentials and login, then run make telegram-up.", flush=True)
@@ -94,7 +85,7 @@ def start_stack(action, provider=None, compose="docker compose"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("build", "up"))
-    parser.add_argument("--provider", choices=("openai", "ollama"))
+    parser.add_argument("--provider", choices=("openai",))
     parser.add_argument("--compose", default="docker compose")
     args = parser.parse_args()
     with (ROOT / ".ai-stack.lock").open("a") as lock:

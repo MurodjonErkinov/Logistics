@@ -1,7 +1,7 @@
 DC ?= docker compose
 PYTHON ?= python3
 
-.PHONY: build build-openai build-ollama up telegram-up telegram-login stop down restart migrations migrate createsuperuser collectstatic shell test bash logs
+.PHONY: build build-openai up telegram-up telegram-login stop down restart migrations migrate createsuperuser collectstatic shell test bash logs
 .NOTPARALLEL:
 
 
@@ -10,9 +10,6 @@ build:
 
 build-openai:
 	$(PYTHON) scripts/ai_stack.py build --provider openai --compose "$(DC)"
-
-build-ollama:
-	$(PYTHON) scripts/ai_stack.py build --provider ollama --compose "$(DC)"
 
 up:
 	$(PYTHON) scripts/ai_stack.py up --compose "$(DC)"
@@ -23,10 +20,10 @@ telegram-login:
 	$(DC) run --rm telegram_importer python manage.py telegram_login
 
 stop:
-	$(DC) --profile telegram --profile ollama --profile frontend --profile driver-bot stop
+	$(DC) --profile telegram --profile frontend --profile driver-bot stop
 
 down:
-	$(DC) --profile telegram --profile ollama --profile frontend --profile driver-bot down
+	$(DC) --profile telegram --profile frontend --profile driver-bot down
 
 restart: down up
 

@@ -62,8 +62,6 @@ def rate_limit_delay(message, headers=None):
 
 
 def ai_cooldown():
-    if get_provider() == "ollama":
-        return None
     return TelegramPost.objects.filter(provider=get_provider(), status=TelegramPost.Status.ERROR, retry_at__gt=timezone.now()).order_by("-retry_at").values_list("retry_at", flat=True).first()
 
 
@@ -180,7 +178,7 @@ def ingest_message(chat_id, message_id, group_name, text, posted_at, expected_re
             except Exception as exc:
                 status = TelegramPost.Status.ERROR
                 detail = str(exc)[:1000]
-                delay = rate_limit_delay(str(exc), getattr(getattr(exc, "response", None), "headers", None)) if getattr(exc, "status_code", None) == 429 else timedelta(hours=1) if "time limit; moving to the next message" in str(exc) else timedelta(seconds=60)
+                delay = rate_limit_delay(str(exc), getattr(getattr(exc, "response", None), "headers", None)) if getattr(exc, "status_code", None) == 429 else timedelta(seconds=60)
                 retry_at = timezone.now() + delay
 
     with transaction.atomic():
