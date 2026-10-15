@@ -41,7 +41,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegistrationSerializer(UserSerializer):
     password = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
-    role = serializers.CharField(read_only=True)
+    role = serializers.ChoiceField(
+        choices=[User.Role.DRIVER, User.Role.DISPATCHER],
+        default=User.Role.DISPATCHER,
+    )
 
     class Meta(UserSerializer.Meta):
         fields = ("id", "username", "email", "first_name", "last_name", "phone_number", "role", "password")

@@ -126,6 +126,16 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           <ErrorBox message={error} />
           <form onSubmit={submit} className="form-stack">
             {register && (
+              <Field label={t("Rol")}>
+                <select name="role" required defaultValue="dispatcher">
+                  <option value="dispatcher">
+                    {t("Dispetcher")} — {t("Yuk joylash")}
+                  </option>
+                  <option value="driver">{t("Haydovchi")}</option>
+                </select>
+              </Field>
+            )}
+            {register && (
               <div className="form-row">
                 <Field label={t("Ism")}>
                   <input
