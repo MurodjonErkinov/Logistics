@@ -1,23 +1,33 @@
-DC ?= docker compose
 PYTHON ?= python3
+# Prefer the server configuration when it exists; use MODE=dev to override.
+MODE ?= $(if $(wildcard .env.production),prod,dev)
+PDC = docker compose --project-name logistics-prod --env-file .env.production -f compose.production.yaml
+DC ?= $(if $(filter prod,$(MODE)),$(PDC),docker compose)
+ALL_DC = $(DC) --profile telegram --profile frontend --profile driver-bot
+PROD_DC = $(PDC) --profile telegram --profile driver-bot
+.DEFAULT_GOAL := up
 
 .PHONY: build build-openai up telegram-up telegram-login stop down restart migrations migrate createsuperuser collectstatic shell test bash logs
 .NOTPARALLEL:
 
 
 build:
-	$(DC) build --no-cache
+	$(ALL_DC) build
 
 build-openai:
 	$(PYTHON) scripts/ai_stack.py build --provider openai --compose "$(DC)"
 
+# Rebuild and recreate every service, including the opt-in bot/parser profiles.
 up:
-	$(PYTHON) scripts/ai_stack.py up --compose "$(DC)"
+	$(ALL_DC) config --quiet
+	$(ALL_DC) build web frontend
+	$(ALL_DC) up -d --wait --force-recreate
+	$(ALL_DC) ps
 
 telegram-up: up
 
 telegram-login:
-	$(DC) run --rm telegram_importer python manage.py telegram_login
+	$(ALL_DC) run --rm telegram_importer python manage.py telegram_login
 
 stop:
 	$(DC) --profile telegram --profile frontend --profile driver-bot stop
@@ -25,7 +35,7 @@ stop:
 down:
 	$(DC) --profile telegram --profile frontend --profile driver-bot down
 
-restart: down up
+restart: up
 
 migrations:
 	$(DC) exec web python manage.py makemigrations
@@ -79,15 +89,18 @@ driver-bot-logs:
 driver-worker-up:
 	$(DC) up -d driver_worker
 
-PDC = docker compose --project-name logistics-prod --env-file .env.production -f compose.production.yaml
-
-.PHONY: prod-build prod-up prod-check prod-logs prod-bot-up prod-telegram-login prod-telegram-up prod-backup
+.PHONY: prod-build prod-up prod-check prod-logs prod-bot-up prod-telegram-login prod-telegram-up prod-backup prod-restart
 
 prod-build:
 	$(PDC) build web frontend
 
 prod-up:
-	$(PDC) up -d --wait
+	$(PROD_DC) config --quiet
+	$(PROD_DC) build web frontend
+	$(PROD_DC) up -d --wait --force-recreate
+	$(PROD_DC) ps
+
+prod-restart: prod-up
 
 prod-check:
 	$(PDC) config --quiet
@@ -95,7 +108,7 @@ prod-check:
 	$(PDC) exec web python manage.py makemigrations --check --dry-run
 
 prod-logs:
-	$(PDC) logs --tail=100 -f
+	$(PROD_DC) logs --tail=100 -f
 
 prod-bot-up:
 	$(PDC) --profile driver-bot up -d --force-recreate driver_bot

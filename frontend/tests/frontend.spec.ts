@@ -87,6 +87,13 @@ test("marketplace filters, saves and fits desktop and mobile", async ({
     path: "test-results/marketplace-desktop.png",
     fullPage: true,
   });
+  await page.locator(".quick-route").filter({ hasText: "Andijon" }).click();
+  await expect(page.locator(".load-card")).toHaveCount(1);
+  await expect(page.getByLabel("Qayerdan", { exact: true })).toHaveValue(
+    "Andijon",
+  );
+  await page.getByRole("button", { name: "Tozalash", exact: true }).click();
+  await expect(page.locator(".load-card")).toHaveCount(3);
   await page.getByLabel("Qayerdan", { exact: true }).fill("Andijon");
   await page.getByRole("button", { name: "Yuk qidirish", exact: true }).click();
   await expect(page.locator(".load-card")).toHaveCount(1);

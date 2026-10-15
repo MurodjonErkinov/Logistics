@@ -103,6 +103,25 @@ export function Marketplace({ onlySaved = false }: { onlySaved?: boolean }) {
           : b.id - a.id,
     );
   }, [loads, filters, sort, onlySaved, saved]);
+  const quickRoutes = useMemo(() => {
+    const routes = new Map<
+      string,
+      { origin: string; destination: string; count: number }
+    >();
+    for (const load of loads) {
+      if (load.status !== "open") continue;
+      const key = JSON.stringify([load.origin, load.destination]);
+      const route = routes.get(key);
+      if (route) route.count += 1;
+      else
+        routes.set(key, {
+          origin: load.origin,
+          destination: load.destination,
+          count: 1,
+        });
+    }
+    return [...routes.values()].sort((a, b) => b.count - a.count).slice(0, 4);
+  }, [loads]);
   const pages = Math.max(1, Math.ceil(visible.length / 9));
   const currentPage = Math.min(page, pages);
   const activeFilters = Object.values(filters).some(Boolean);
@@ -328,6 +347,42 @@ export function Marketplace({ onlySaved = false }: { onlySaved?: boolean }) {
             </div>
           )}
         </form>
+        {!onlySaved && !error && quickRoutes.length > 0 && (
+          <div className="quick-routes">
+            <p className="quick-routes-label">
+              <Route size={15} />
+              {t("Yo‘nalishni tez tanlash")}
+            </p>
+            <div className="quick-route-list">
+              {quickRoutes.map((route) => (
+                <button
+                  key={JSON.stringify([route.origin, route.destination])}
+                  type="button"
+                  className="quick-route"
+                  aria-pressed={
+                    filters.origin === route.origin &&
+                    filters.destination === route.destination
+                  }
+                  onClick={() => {
+                    const next = {
+                      ...defaultFilters,
+                      origin: route.origin,
+                      destination: route.destination,
+                    };
+                    setDraft(next);
+                    setFilters(next);
+                    setPage(1);
+                  }}
+                >
+                  <span>{route.origin}</span>
+                  <ArrowRight size={14} />
+                  <span>{route.destination}</span>
+                  <small>{route.count}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
       <div className="results-toolbar">
         <div className="results-title">
