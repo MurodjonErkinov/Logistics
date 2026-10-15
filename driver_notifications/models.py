@@ -53,6 +53,7 @@ class TelegramAccount(models.Model):
     owner = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     chat_id = models.BigIntegerField(unique=True)
     state = models.JSONField(default=dict)
+    ui = models.JSONField(default=dict, blank=True)
     blocked = models.BooleanField(default=False)
 
 

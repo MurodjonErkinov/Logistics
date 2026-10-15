@@ -68,7 +68,7 @@ class LocationParserTests(SimpleTestCase):
             parse_location("https://maps.app.goo.gl/example")
 
 
-@patch("driver_notifications.telegram.call")
+@patch("driver_notifications.telegram.call", return_value={"message_id": 1})
 class BotLocationTests(TestCase):
     def setUp(self):
         self.driver = get_user_model().objects.create_user(username="location_driver", role="driver")

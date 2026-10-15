@@ -21,21 +21,28 @@ class InlineBotTests(TestCase):
         handle_update({"callback_query": {"id": "query1", "from": {"id": 123}, "data": payload, "message": {"chat": {"id": 123, "type": "private"}, "message_id": 1}}})
         self.account.refresh_from_db()
 
+    def sent(self, call):
+        return next(item for item in reversed(call.call_args_list) if item.args[0] == "sendMessage")
+
     def payload(self, call, suffix):
-        for item in reversed(call.call_args_list):
-            for row in item.kwargs.get("reply_markup", {}).get("inline_keyboard", []):
-                for button in row:
-                    if button.get("callback_data", "").endswith(suffix):
-                        return button["callback_data"]
+        self.account.refresh_from_db()
+        for payload in self.account.ui.get("actions", {}).values():
+            if payload.endswith(suffix):
+                return payload
         self.fail(f"Button {suffix} missing")
 
     def test_menu_opens_forms_without_commands(self, call):
         self.message("/start")
-        self.assertEqual(call.call_args.args[0], "editMessageReplyMarkup")
-        self.assertIn("inline_keyboard", call.call_args.kwargs["reply_markup"])
+        self.message("🚛 Mashinalarim")
+        self.assertIn("Hali mashina", self.sent(call).kwargs["text"])
+        self.message("➕ Mashina qo‘shish")
+        self.assertEqual(self.account.state["flow"], "vehicle")
+        self.message("/start")
+        self.assertEqual(self.sent(call).args[0], "sendMessage")
+        self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
         self.tap("nav:vehicle")
         self.assertEqual(self.account.state["flow"], "vehicle")
-        self.assertIn("inline_keyboard", call.call_args.kwargs["reply_markup"])
+        self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
         self.tap(self.payload(call, ":/cancel"))
         self.assertEqual(self.account.state, {})
         self.tap("nav:settings")
@@ -50,7 +57,7 @@ class InlineBotTests(TestCase):
         index = self.account.state["index"]
         self.tap(payload)
         self.assertEqual(self.account.state["index"], index)
-        self.assertIn("eski", call.call_args.kwargs["text"])
+        self.assertIn("eski", self.sent(call).kwargs["text"])
         self.message("8")
         self.tap(self.payload(call, ":-"))
         self.tap(self.payload(call, ":-"))
@@ -75,9 +82,9 @@ class InlineBotTests(TestCase):
         prompt(self.account)
         self.account.refresh_from_db()
         self.tap(self.payload(call, ":location"))
-        self.assertIn("Skrepka", call.call_args.kwargs["text"])
+        self.assertIn("Skrepka", self.sent(call).kwargs["text"])
         self.assertEqual(self.account.state["index"], TICKET_STEPS.index("current_location"))
-        self.assertIn("inline_keyboard", call.call_args.kwargs["reply_markup"])
+        self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
         self.tap(self.payload(call, ":/back"))
         self.assertEqual(self.account.state["index"], TICKET_STEPS.index("vehicle"))
         self.tap(self.payload(call, ":/cancel"))
@@ -91,19 +98,28 @@ class InlineBotTests(TestCase):
                     self.account.state = {"flow": flow, "index": i, "data": {"origins": [{"name": "Toshkent"}], "destinations": [{"name": "Samarqand"}]}}
                     self.account.save()
                     prompt(self.account)
-                    markup = call.call_args.kwargs["reply_markup"]
-                    self.assertIn("inline_keyboard", markup)
-                    self.assertNotIn("keyboard", markup)
-                    buttons = [b for row in markup["inline_keyboard"] for b in row]
-                    self.assertTrue(any(b["callback_data"] == "nav:menu" for b in buttons))
-                    for b in buttons:
-                        self.assertLessEqual(len(b["callback_data"].encode()), 64)
+                    markup = self.sent(call).kwargs["reply_markup"]
+                    self.assertIn("keyboard", markup)
+                    self.assertNotIn("inline_keyboard", markup)
+                    buttons = [b for row in markup["keyboard"] for b in row]
+                    self.assertTrue(any(b["text"] == "🏠 Menyu" for b in buttons))
+                    self.assertTrue(markup["resize_keyboard"])
+                    self.assertTrue(markup["is_persistent"])
 
     def test_russian_choices_are_inline(self, call):
         Preference.objects.create(owner=self.driver, language="ru")
         self.tap("nav:settings")
         self.tap(self.payload(call, ":ru"))
-        self.assertIn("inline_keyboard", call.call_args.kwargs["reply_markup"])
-        buttons = [b["text"] for row in call.call_args.kwargs["reply_markup"]["inline_keyboard"] for b in row]
+        self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
+        buttons = [b["text"] for row in self.sent(call).kwargs["reply_markup"]["keyboard"] for b in row]
         self.assertIn("Да", buttons)
         self.assertIn("🏠 Меню", buttons)
+
+    def test_old_bot_and_user_messages_are_deleted(self, call):
+        self.account.ui = {"message_id": 99}
+        self.account.save(update_fields=["ui"])
+        handle_update({"message": {"message_id": 100, "chat": {"id": 123, "type": "private"},
+                                   "from": {"id": 123}, "text": "/start"}})
+        deleted = [item.kwargs["message_id"] for item in call.call_args_list if item.args[0] == "deleteMessage"]
+        self.assertIn(99, deleted)
+        self.assertIn(100, deleted)

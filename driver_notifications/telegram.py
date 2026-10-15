@@ -46,10 +46,37 @@ def call(method, **payload):
     return result["result"]
 
 
+def delete_message(chat_id, message_id):
+    if not message_id:
+        return
+    try:
+        call("deleteMessage", chat_id=chat_id, message_id=message_id)
+    except BotError as exc:
+        if exc.code not in (400, 403):
+            raise
+
+
 def say(account, uz, ru=None, **kwargs):
     pref, _ = Preference.objects.get_or_create(owner=account.owner)
-    kwargs.setdefault("reply_markup", inline_keyboard(account, pref.language == "ru"))
-    return call("sendMessage", chat_id=account.chat_id, text=(ru if ru and pref.language == "ru" else uz)[:4000], **kwargs)
+    markup = kwargs.pop("reply_markup", inline_keyboard(account, pref.language == "ru"))
+    rows, actions = [], {}
+    for row in markup.get("inline_keyboard", []):
+        buttons = []
+        for button in row:
+            if "callback_data" in button:
+                buttons.append({"text": button["text"]})
+                actions[button["text"]] = button["callback_data"]
+        if buttons:
+            rows.append(buttons)
+    result = call("sendMessage", chat_id=account.chat_id,
+                  text=(ru if ru and pref.language == "ru" else uz)[:4000],
+                  reply_markup={"keyboard": rows, "resize_keyboard": True, "is_persistent": True}, **kwargs)
+    previous = account.ui.get("message_id")
+    account.ui = {"message_id": result["message_id"], "actions": actions}
+    account.save(update_fields=["ui"])
+    if previous != result["message_id"]:
+        delete_message(account.chat_id, previous)
+    return result
 
 
 TICKET_STEPS = ["title", "vehicle", "current_location", "origins", "origin_points", "origin_radius", "route_mode", "destinations", "destination_points", "prices", "etas", "priorities", "radii", "ready_at", "expires_at", "available_tons", "partial_load", "currency", "price_basis", "min_price", "match_mode", "waypoints", "notes", "confirm"]
@@ -250,7 +277,7 @@ def prompt(account):
         ru += names
     if key == "confirm":
         summary = confirmation(account)
-        say(account, summary)
+        return say(account, summary + "\n\n" + (ru if pref.language == "ru" else uz))
     return say(account, uz, ru, **kwargs)
 
 
@@ -357,7 +384,8 @@ def parse_answer(key, text, message, data, state=None):
 
 
 def callback(account, query):
-    call("answerCallbackQuery", callback_query_id=query["id"])
+    if query.get("id"):
+        call("answerCallbackQuery", callback_query_id=query["id"])
     parts = query.get("data", "").split(":")
     if len(parts) != 2 or not parts[1].isdigit():
         return
@@ -405,6 +433,7 @@ def handle_update(update):
     if not query and text.startswith("/start "):
         account = bind_account(text.split(maxsplit=1)[1], chat_id)
         if account:
+            delete_message(chat_id, message.get("message_id"))
             say(account, "Akkaunt ulandi. Kerakli bo‘limni tugmalardan tanlang.", "Аккаунт подключён. Выберите раздел кнопками.")
         else:
             call("sendMessage", chat_id=chat_id, text="Havola yaroqsiz yoki muddati tugagan. Saytdan yangi ulash havolasini oling. / Ссылка недействительна. Получите новую на сайте.", reply_markup=public_keyboard())
@@ -415,11 +444,19 @@ def handle_update(update):
             call("answerCallbackQuery", callback_query_id=query["id"])
         call("sendMessage", chat_id=chat_id, text="Saytda driver bo‘lib kiring → Tiketlarim → Xabar sozlamalari → Telegramni ulash. / Войдите на сайт как водитель → Мои заявки → Настройки уведомлений → Подключить Telegram.", reply_markup=public_keyboard())
         return
+    if not query:
+        delete_message(chat_id, message.get("message_id"))
+        payload = None if update.get("_resolved") else account.ui.get("actions", {}).get(text)
+        if payload:
+            return handle_update({"callback_query": {
+                "from": {"id": sender}, "data": payload, "message": message,
+            }})
     if query:
         payload = query.get("data", "")
         if not payload.startswith(("nav:", "u:")):
             return callback(account, query)
-        call("answerCallbackQuery", callback_query_id=query["id"])
+        if query.get("id"):
+            call("answerCallbackQuery", callback_query_id=query["id"])
         parts = payload.split(":", 2)
         if parts[0] == "nav":
             commands = {"ticket": "/ticket", "vehicle": "/vehicle", "tickets": "/tickets", "settings": "/settings", "menu": "/start", "vehicles": "/vehicles"}
@@ -443,13 +480,10 @@ def handle_update(update):
                 return say(account, "📍 Skrepka → Lokatsiya → xaritada kerakli joyni tanlang va yuboring. Hozirgi joyingizni ham shu yerdan yuborasiz.", "📍 Скрепка → Геопозиция → выберите нужную точку и отправьте. Текущее место отправляется там же.")
             if text == "maps":
                 return say(account, "🗺 Google Maps yoki Yandex Maps’da nuqtani tanlang → Ulashish → havolani shu chatga yuboring.", "🗺 Выберите точку в Google Maps или Яндекс Картах → Поделиться → отправьте ссылку в этот чат.")
-        return handle_update({"message": {"chat": message["chat"], "from": {"id": sender}, "text": text}})
+        return handle_update({"_resolved": True, "message": {"chat": message["chat"], "from": {"id": sender}, "text": text}})
     if text in ("/cancel", "/start", "/help"):
         account.state = {}
         account.save(update_fields=["state"])
-        if text == "/start":
-            removed = call("sendMessage", chat_id=account.chat_id, text="🏠 Menyu / Меню", reply_markup={"remove_keyboard": True})
-            return call("editMessageReplyMarkup", chat_id=account.chat_id, message_id=removed["message_id"], reply_markup=inline_keyboard(account, Preference.objects.get_or_create(owner=account.owner)[0].language == "ru"))
         return say(account, "Kerakli bo‘limni tanlang.", "Выберите раздел.")
     if text == "/vehicles":
         vehicles = list(Vehicle.objects.filter(owner=account.owner))
@@ -459,9 +493,20 @@ def handle_update(update):
         rows = [[{"text": "➕ Добавить машину" if ru else "➕ Mashina qo‘shish", "callback_data": "nav:vehicle"}]] + menu_rows(ru)
         return say(account, "\n".join(lines) or "Hali mashina qo‘shilmagan.", "\n".join(lines) or "Машины пока не добавлены.", reply_markup={"inline_keyboard": rows})
     if text == "/tickets":
+        pref, _ = Preference.objects.get_or_create(owner=account.owner)
+        ru = pref.language == "ru"
+        lines, rows = [], []
         for ticket in Ticket.objects.filter(owner=account.owner)[:20]:
-            say(account, f"#{ticket.pk} {ticket.title}\n{ticket.status}\n{ticket.expires_at:%Y-%m-%d %H:%M} UTC", reply_markup={"inline_keyboard": [[{"text": "Pauza / Пауза", "callback_data": f"pause:{ticket.pk}"}, {"text": "Davom / Продолжить", "callback_data": f"resume:{ticket.pk}"}], [{"text": "+7 kun / дней", "callback_data": f"extend:{ticket.pk}"}, {"text": "Yopish / Закрыть", "callback_data": f"close:{ticket.pk}"}], [{"text": "Tahrirlash / Изменить", "callback_data": f"nav:edit:{ticket.pk}"}, {"text": "Qaytish / Обратно", "callback_data": f"nav:return:{ticket.pk}"}], [{"text": "🏠 Menyu / Меню", "callback_data": "nav:menu"}]]})
-        return say(account, "Tiketni yuqoridagi tugmalar orqali boshqaring yoki yangi tiket oching.", "Управляйте заявками кнопками выше или создайте новую.")
+            lines.append(f"#{ticket.pk} {ticket.title} · {label(ticket.status, ru)}")
+            actions = [("pause", "Pauza", "Пауза"), ("resume", "Davom", "Продолжить"),
+                       ("extend", "+7 kun", "+7 дней"), ("close", "Yopish", "Закрыть"),
+                       ("nav:edit", "Tahrirlash", "Изменить"), ("nav:return", "Qaytish", "Обратно")]
+            buttons = [{"text": f"#{ticket.pk} {r if ru else u}", "callback_data": f"{action}:{ticket.pk}"}
+                       for action, u, r in actions]
+            rows.extend([buttons[i:i+2] for i in range(0, len(buttons), 2)])
+        rows += menu_rows(ru)
+        return say(account, "\n".join(lines) or ("Заявок пока нет." if ru else "Hali tiket yo‘q."),
+                   reply_markup={"inline_keyboard": rows})
     if text in ("/ticket", "/vehicle", "/settings") or text.startswith("/edit "):
         flow = "vehicle" if text == "/vehicle" else "preferences" if text == "/settings" else "ticket"
         state = {"flow": flow, "index": 0, "data": {"match_mode": "any_two"} if flow == "ticket" else {}}
