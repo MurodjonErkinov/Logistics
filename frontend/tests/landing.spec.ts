@@ -21,6 +21,17 @@ async function mockSession(page: Page) {
     signedIn = true;
     return route.fulfill({ json: {} });
   });
+  await page.route("**/api/auth/registration-code/", (route) =>
+    route.fulfill({
+      status: 201,
+      json: {
+        verification_id: "01234567-89ab-4cde-abcd-0123456789ab",
+        bot_url:
+          "https://t.me/YukFlowTestBot?start=reg_0123456789ab4cdeabcd0123456789ab",
+        retry_after: 60,
+      },
+    }),
+  );
   await page.route("**/api/auth/register/", (route) => {
     account = { ...account, ...route.request().postDataJSON() };
     return route.fulfill({ status: 201, json: account });
@@ -178,6 +189,26 @@ test("dispatcher registration selects role and opens existing dashboard", async 
     .getByLabel("Foydalanuvchi nomi", { exact: true })
     .fill("new_dispatcher");
   await page.getByLabel("Telefon raqam").fill("+998901234567");
+  await page
+    .getByRole("button", { name: "Telegramdan kod olish", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", { name: "Telegram botni ochish" }),
+  ).toHaveAttribute("href", /https:\/\/t.me\/YukFlowTestBot/);
+  await page.getByLabel("Tasdiqlash kodi", { exact: true }).fill("123456");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByLabel("Tasdiqlash kodi", { exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "test-results/registration-telegram-mobile.png",
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+
   await page.getByLabel("Parol", { exact: true }).fill("Testing12345!");
   await page
     .getByRole("button", { name: "Akkaunt yaratish", exact: true })
@@ -247,4 +278,40 @@ test("quick shipment preserves route and vehicle through login", async ({
   await expect(
     page.getByLabel("Narx kelishiladi", { exact: true }),
   ).not.toBeChecked();
+});
+
+test("registration verification resets when phone changes and handles unavailable bot", async ({
+  page,
+}) => {
+  await mockSession(page);
+  await page.goto("/register?role=driver");
+  const phone = page.getByLabel("Telefon raqam", { exact: true });
+  await phone.fill("+998901234567");
+  await page
+    .getByRole("button", { name: "Telegramdan kod olish", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Tasdiqlash kodi", { exact: true }),
+  ).toBeVisible();
+  await phone.fill("+998909999999");
+  await expect(page.getByLabel("Tasdiqlash kodi", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.reload();
+  await page.route("**/api/auth/registration-code/", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { detail: "Telegram tasdiqlash boti sozlanmagan." },
+    }),
+  );
+  await phone.fill("+998909999999");
+  await page
+    .getByRole("button", { name: "Telegramdan kod olish", exact: true })
+    .click();
+  await expect(page.locator(".error-box")).toContainText(
+    "Telegram tasdiqlash boti sozlanmagan.",
+  );
+  await expect(page.getByLabel("Tasdiqlash kodi", { exact: true })).toHaveCount(
+    0,
+  );
 });

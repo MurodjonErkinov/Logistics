@@ -65,14 +65,19 @@ async function handle(
   const { path } = await context.params;
   const route = path.join("/");
   if (
-    !/^(auth\/(login|register|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences|telegram-link)|partners\/companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?)$/.test(
+    !/^(auth\/(login|register|registration-code|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences|telegram-link)|partners\/companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?)$/.test(
       route,
     )
   ) {
     return NextResponse.json({ detail: "Sahifa topilmadi." }, { status: 404 });
   }
   if (
-    ["auth/login", "auth/register", "auth/logout"].includes(route) &&
+    [
+      "auth/login",
+      "auth/register",
+      "auth/registration-code",
+      "auth/logout",
+    ].includes(route) &&
     request.method !== "POST"
   ) {
     return NextResponse.json(
@@ -138,7 +143,11 @@ async function handle(
     const refresh = request.cookies.get("yf_refresh")?.value;
     let access = request.cookies.get("yf_access")?.value;
     let renewed: Tokens | null = null;
-    const anonymous = route === "auth/login" || route === "auth/register";
+    const anonymous = [
+      "auth/login",
+      "auth/register",
+      "auth/registration-code",
+    ].includes(route);
     if (!anonymous && !access && refresh) {
       renewed = await renew(refresh, request.headers.get("x-real-ip"));
       access = renewed?.access;

@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { api, errorMessage } from "@/lib/api";
 import { useSession } from "./session";
 import { ErrorBox, Field } from "./ui";
+import { RegistrationPhone } from "./registration-phone";
 
 export function AuthForm({ register = false }: { register?: boolean }) {
   const { t } = useLocale();
@@ -43,6 +44,10 @@ export function AuthForm({ register = false }: { register?: boolean }) {
     setBusy(true);
     const data = Object.fromEntries(new FormData(event.currentTarget));
     try {
+      if (register && !data.verification_id)
+        throw new Error(
+          t("Avval telefon raqamingizni Telegram orqali tasdiqlang."),
+        );
       if (register)
         await api("auth/register/", {
           method: "POST",
@@ -180,21 +185,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
                 placeholder={t("Foydalanuvchi nomingiz")}
               />
             </Field>
-            {register && (
-              <Field
-                label={t("Telefon raqam")}
-                hint={t("Xalqaro formatda kiriting: +998901234567")}
-              >
-                <input
-                  name="phone_number"
-                  type="tel"
-                  autoComplete="tel"
-                  placeholder="+998"
-                  pattern="\+[1-9][0-9]{7,14}"
-                  required
-                />
-              </Field>
-            )}
+            {register && <RegistrationPhone disabled={busy} />}
             <Field
               label={t("Parol")}
               hint={

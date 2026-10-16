@@ -429,6 +429,10 @@ def handle_update(update):
     sender = (query or message).get("from", {}).get("id")
     if sender != chat_id:
         return
+    if not query:
+        from authentication.telegram_verification import handle_registration_message
+        if handle_registration_message(message, call, delete_message):
+            return
     text = message.get("text", "").strip()[:4000]
     if not query and text.startswith("/start "):
         account = bind_account(text.split(maxsplit=1)[1], chat_id)
@@ -438,11 +442,20 @@ def handle_update(update):
         else:
             call("sendMessage", chat_id=chat_id, text="Havola yaroqsiz yoki muddati tugagan. Saytdan yangi ulash havolasini oling. / Ссылка недействительна. Получите новую на сайте.", reply_markup=public_keyboard())
         return
-    account = TelegramAccount.objects.select_related("owner").filter(chat_id=chat_id, owner__role="driver", owner__is_active=True).first()
+    account = TelegramAccount.objects.select_related("owner").filter(chat_id=chat_id, owner__is_active=True).first()
     if not account:
         if query:
             call("answerCallbackQuery", callback_query_id=query["id"])
         call("sendMessage", chat_id=chat_id, text="Saytda driver bo‘lib kiring → Tiketlarim → Xabar sozlamalari → Telegramni ulash. / Войдите на сайт как водитель → Мои заявки → Настройки уведомлений → Подключить Telegram.", reply_markup=public_keyboard())
+        return
+    if account.owner.role != "driver":
+        if query and query.get("id"):
+            call("answerCallbackQuery", callback_query_id=query["id"])
+        result = call("sendMessage", chat_id=chat_id, text="Telegram akkauntingiz YukFlow’ga ulangan. Yuk joylash uchun saytdagi kabinetingizga kiring. / Telegram подключён к YukFlow. Размещайте грузы в личном кабинете на сайте.", reply_markup={"remove_keyboard": True})
+        delete_message(chat_id, account.ui.get("message_id"))
+        delete_message(chat_id, message.get("message_id"))
+        account.ui = {"message_id": result["message_id"], "actions": {}}
+        account.save(update_fields=["ui"])
         return
     if not query:
         delete_message(chat_id, message.get("message_id"))

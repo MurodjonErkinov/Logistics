@@ -1,3 +1,4 @@
+import re
 from hashlib import sha256
 from django.conf import settings
 from ipaddress import ip_address
@@ -38,3 +39,18 @@ class RegistrationThrottle(AuthAddressThrottle):
 class RefreshThrottle(AuthAddressThrottle):
     scope = "refresh"
     rate = "120/min"
+
+
+class RegistrationCodeAddressThrottle(AuthAddressThrottle):
+    scope = "registration_code_address"
+    rate = "20/hour"
+
+
+class RegistrationPhoneThrottle(SimpleRateThrottle):
+    scope = "registration_phone"
+    rate = "5/hour"
+
+    def get_cache_key(self, request, view):
+        data = request.data if isinstance(request.data, dict) else {}
+        phone = re.sub(r"[^0-9]", "", str(data.get("phone_number", ""))[:32])
+        return self.cache_format % {"scope": self.scope, "ident": sha256(phone.encode()).hexdigest()}

@@ -5,6 +5,8 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.utils import get_md5_hash_password
 
+from .verification import normalize_phone, register_verified_user
+
 User = get_user_model()
 
 
@@ -39,7 +41,24 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 
+class PhoneVerificationSerializer(serializers.Serializer):
+    phone_number = serializers.CharField(max_length=32)
+
+    def validate_phone_number(self, value):
+        return normalize_phone(value)
+
+
 class RegistrationSerializer(UserSerializer):
+    phone_number = serializers.CharField(max_length=32, required=True)
+    verification_id = serializers.UUIDField(write_only=True)
+    verification_code = serializers.RegexField(r"^[0-9]{6}$", write_only=True, error_messages={"invalid": "Telegramdan olingan 6 xonali kodni kiriting."})
+
+    def validate_phone_number(self, value):
+        return normalize_phone(value)
+
+    def create(self, validated_data):
+        return register_verified_user(validated_data)
+
     password = serializers.CharField(write_only=True, required=True, style={"input_type": "password"})
     role = serializers.ChoiceField(
         choices=[User.Role.DRIVER, User.Role.DISPATCHER],
@@ -47,7 +66,7 @@ class RegistrationSerializer(UserSerializer):
     )
 
     class Meta(UserSerializer.Meta):
-        fields = ("id", "username", "email", "first_name", "last_name", "phone_number", "role", "password")
+        fields = ("id", "username", "email", "first_name", "last_name", "phone_number", "role", "password", "verification_id", "verification_code")
 
 
 class ProfileSerializer(UserSerializer):

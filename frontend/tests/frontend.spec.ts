@@ -137,20 +137,33 @@ test("marketplace filters, saves and fits desktop and mobile", async ({
   ).toBeVisible();
 });
 
-test("live register, company identity, cargo create edit close and delete", async ({
+test("live login, company identity, cargo create edit close and delete", async ({
   page,
   context,
 }) => {
   const username = `yf_e2e_${Date.now()}`;
   accounts.push(username);
-  await page.goto("/register");
-  await page.getByLabel("Ism", { exact: true }).fill("Frontend");
+  // This cargo integration test uses a disposable fixture; public OTP registration
+  // is exercised separately by the backend and landing browser tests.
+  execFileSync(
+    "docker",
+    [
+      "compose",
+      "exec",
+      "-T",
+      "web",
+      "python",
+      "manage.py",
+      "shell",
+      "-c",
+      `from django.contrib.auth import get_user_model; get_user_model().objects.create_user(username=${JSON.stringify(username)}, password="RoadFlow!Strong2026", first_name="Frontend", role="dispatcher", phone_number="+998901234567")`,
+    ],
+    { cwd: "..", stdio: "pipe" },
+  );
+  await page.goto("/login");
   await page.getByLabel("Foydalanuvchi nomi", { exact: true }).fill(username);
-  await page.getByLabel("Telefon raqam", { exact: true }).fill("+998901234567");
   await page.getByLabel("Parol", { exact: true }).fill("RoadFlow!Strong2026");
-  await page
-    .getByRole("button", { name: "Akkaunt yaratish", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Kirish", exact: true }).click();
   await expect(page).toHaveURL(/dashboard/);
   await context.clearCookies({ name: "yf_access" });
   const renewed = await Promise.all([
@@ -224,7 +237,7 @@ test("live register, company identity, cargo create edit close and delete", asyn
   await expect(page.getByRole("status")).toContainText("Profil saqlandi");
   await page.getByRole("button", { name: "Akkauntdan chiqish" }).click();
   await expect(
-    page.getByRole("link", { name: "Kirish", exact: true }),
+    page.getByRole("banner").getByRole("link", { name: "Kirish", exact: true }),
   ).toBeVisible();
 });
 
