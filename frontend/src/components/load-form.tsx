@@ -1,6 +1,7 @@
 "use client";
 import { useLocale } from "@/components/locale";
 
+import { shipmentVehicles } from "@/lib/shipment-vehicles";
 import { VehiclePicker } from "./vehicle-picker";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -30,6 +31,38 @@ function Form({ id }: { id?: string }) {
 
   const { user } = useSession();
   const router = useRouter();
+  const [draft, setDraft] = useState({
+    origin: "",
+    destination: "",
+    size: "",
+    price: "",
+    currency: "UZS",
+    vehicle: "",
+  });
+  useEffect(() => {
+    if (id) return;
+    const params = new URLSearchParams(window.location.search);
+    const size = params.get("vehicle_size") || "";
+    const rawPrice = params.get("price_amount") || "";
+    const price =
+      /^\d+(\.\d{1,2})?$/.test(rawPrice) &&
+      Number.isFinite(Number(rawPrice)) &&
+      Number(rawPrice) > 0
+        ? rawPrice
+        : "";
+    setNegotiable(!price);
+    const vehicle = shipmentVehicles.find(
+      (v) => v.id === params.get("shipment_vehicle"),
+    );
+    setDraft({
+      vehicle: vehicle?.title || "",
+      price,
+      currency: params.get("currency") === "USD" ? "USD" : "UZS",
+      origin: (params.get("origin") || "").slice(0, 150),
+      destination: (params.get("destination") || "").slice(0, 150),
+      size: ["S", "M", "L", "XL", "XXL", "3XL"].includes(size) ? size : "",
+    });
+  }, [id]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [load, setLoad] = useState<Load | null>(null);
   const [negotiable, setNegotiable] = useState(true);
@@ -151,7 +184,8 @@ function Form({ id }: { id?: string }) {
                   name="origin"
                   required
                   maxLength={150}
-                  defaultValue={load?.origin}
+                  key={`origin-${draft.origin}`}
+                  defaultValue={load?.origin ?? draft.origin}
                   placeholder={t("Masalan, Andijon")}
                 />
               </Field>
@@ -160,7 +194,8 @@ function Form({ id }: { id?: string }) {
                   name="destination"
                   required
                   maxLength={150}
-                  defaultValue={load?.destination}
+                  key={`destination-${draft.destination}`}
+                  defaultValue={load?.destination ?? draft.destination}
                   placeholder={t("Masalan, Namangan")}
                 />
               </Field>
@@ -175,10 +210,10 @@ function Form({ id }: { id?: string }) {
               />
             </Field>
             <VehiclePicker
-              key={load?.id ?? "new"}
+              key={load?.id ?? `new-${draft.size}-${draft.vehicle}`}
               kind={load?.vehicle_kind}
-              size={load?.vehicle_size}
-              legacy={load?.vehicle_type}
+              size={load?.vehicle_size ?? draft.size}
+              legacy={load?.vehicle_type ?? draft.vehicle}
             />
             <div className="form-row">
               <Field label={t("Og‘irlik (tonna) *")}>
@@ -229,12 +264,17 @@ function Form({ id }: { id?: string }) {
                   min="0.01"
                   step="0.01"
                   required={!negotiable}
-                  defaultValue={load?.price_amount || ""}
+                  key={`price-${draft.price}`}
+                  defaultValue={load?.price_amount ?? draft.price}
                   placeholder="0"
                 />
               </Field>
               <Field label={t("Valyuta")}>
-                <select name="currency" defaultValue={load?.currency || "UZS"}>
+                <select
+                  name="currency"
+                  key={`currency-${draft.currency}`}
+                  defaultValue={load?.currency || draft.currency}
+                >
                   <option value="UZS">{t("UZS — so‘m")}</option>
                   <option value="USD">{t("USD — dollar")}</option>
                 </select>

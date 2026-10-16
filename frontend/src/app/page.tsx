@@ -1,4 +1,5 @@
-import { Marketplace } from "@/components/marketplace";
-export default function Home() {
-  return <Marketplace />;
+import { Home } from "@/components/home";
+
+export default function Page() {
+  return <Home />;
 }

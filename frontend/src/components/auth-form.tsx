@@ -2,7 +2,7 @@
 import { useLocale } from "@/components/locale";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,6 +25,18 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState(false);
+  const [continuation, setContinuation] = useState("");
+  const [role, setRole] = useState("dispatcher");
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\"))
+      setContinuation(`?next=${encodeURIComponent(next)}`);
+    const requestedRole = new URLSearchParams(window.location.search).get(
+      "role",
+    );
+    if (requestedRole === "driver" || requestedRole === "dispatcher")
+      setRole(requestedRole);
+  }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
@@ -127,7 +139,12 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           <form onSubmit={submit} className="form-stack">
             {register && (
               <Field label={t("Rol")}>
-                <select name="role" required defaultValue="dispatcher">
+                <select
+                  name="role"
+                  required
+                  value={role}
+                  onChange={(event) => setRole(event.target.value)}
+                >
                   <option value="dispatcher">
                     {t("Dispetcher")} — {t("Yuk joylash")}
                   </option>
@@ -220,7 +237,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             {register
               ? t("Akkauntingiz bormi?")
               : t("Hali akkauntingiz yo‘qmi?")}{" "}
-            <Link href={register ? "/login" : "/register"}>
+            <Link href={`${register ? "/login" : "/register"}${continuation}`}>
               {register ? t("Kirish") : t("Ro‘yxatdan o‘tish")}
             </Link>
           </p>

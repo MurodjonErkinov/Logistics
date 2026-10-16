@@ -49,7 +49,15 @@ test("marketplace filters, saves and fits desktop and mobile", async ({
   page,
 }) => {
   await page.route("**/api/auth/me/", (route) =>
-    route.fulfill({ status: 401, json: { detail: "Not authenticated" } }),
+    route.fulfill({
+      json: {
+        id: 1,
+        username: "yuk_egasi",
+        first_name: "Ali",
+        role: "dispatcher",
+        is_staff: false,
+      },
+    }),
   );
   await page.route("**/api/cargo/loads/**", (route) =>
     route.fulfill({
@@ -125,7 +133,7 @@ test("marketplace filters, saves and fits desktop and mobile", async ({
     .getByRole("link", { name: "Mening yuklarim", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Kabinetga xush kelibsiz" }),
+    page.getByRole("heading", { name: "Mening yuklarim", exact: true }),
   ).toBeVisible();
 });
 

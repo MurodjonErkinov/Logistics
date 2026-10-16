@@ -35,7 +35,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useLocale();
 
   const path = usePathname();
-  const { user, logout } = useSession();
+  const { user, logout, loading } = useSession();
   const [menu, setMenu] = useState(false);
   const navigation = [
     ...(user
@@ -58,6 +58,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
       (item) => user?.role !== "driver" || ["/", "/saved"].includes(item.href),
     ),
   ];
+  if (path === "/" && (loading || !user)) return <>{children}</>;
+
   const authPage = path === "/login" || path === "/register";
   if (authPage)
     return (
