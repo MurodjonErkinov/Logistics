@@ -20,9 +20,15 @@ from .service import bind_account, notify, scan_ticket
 
 
 class BotError(Exception):
-    def __init__(self, code, retry_after=60):
+    def __init__(self, code, retry_after=60, description=""):
         self.code, self.retry_after = code, retry_after
-        super().__init__(f"Telegram error {code}")
+        message = f"Telegram error {code}"
+        if code == 409:
+            if "webhook" in description.casefold():
+                message += ": webhook is active; getUpdates polling cannot run with a webhook."
+            else:
+                message += ": another bot instance is polling this token. Keep one driver_bot running; use separate tokens for local and server environments."
+        super().__init__(message)
 
 
 def call(method, **payload):
@@ -38,11 +44,11 @@ def call(method, **payload):
             body = json.loads(exc.read())
         except (ValueError, OSError):
             body = {}
-        raise BotError(exc.code, body.get("parameters", {}).get("retry_after", 60)) from None
+        raise BotError(exc.code, body.get("parameters", {}).get("retry_after", 60), body.get("description", "")) from None
     except (OSError, ValueError):
         raise BotError("network") from None
     if not result.get("ok"):
-        raise BotError(result.get("error_code", "unknown"))
+        raise BotError(result.get("error_code", "unknown"), description=result.get("description", ""))
     return result["result"]
 
 

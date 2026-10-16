@@ -1,3 +1,4 @@
+import logging
 import secrets
 import uuid
 
@@ -7,6 +8,8 @@ from rest_framework.exceptions import ValidationError
 
 from .models import RegistrationVerification
 from .verification import CODE_LIFETIME, code_digest, normalize_phone
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -21,8 +24,18 @@ def handle_registration_message(message, call, delete_message):
         except ValueError:
             token = None
         row = RegistrationVerification.objects.select_for_update().filter(verification_id=token).first() if token else None
-        if not row or row.consumed_at or row.expires_at <= timezone.now() or row.chat_id not in (None, chat_id):
-            call("sendMessage", chat_id=chat_id, text="Tasdiqlash havolasi eskirgan. Saytdan yangi kod so‘rang. / Получите новую ссылку на сайте.")
+        if not row:
+            logger.warning("Registration Start: request_not_found. Check that this bot and the website use the same database and only one bot instance polls Telegram.")
+            call("sendMessage", chat_id=chat_id, text="Bu tasdiqlash havolasi bot bazasida topilmadi. Saytdagi oxirgi “Telegramga o‘tish” tugmasini bosing. Yangi havolada ham takrorlansa, administratorga xabar bering. / Запрос не найден. Откройте последнюю ссылку с сайта. Если ошибка повторяется, обратитесь к администратору.")
+            return True
+        if row.consumed_at:
+            call("sendMessage", chat_id=chat_id, text="Bu raqam allaqachon tasdiqlangan. Saytda akkauntingizga kiring. / Номер уже подтверждён. Войдите в аккаунт на сайте.")
+            return True
+        if row.expires_at <= timezone.now():
+            call("sendMessage", chat_id=chat_id, text="Tasdiqlash havolasining muddati tugagan. Saytdan yangi kod oling. / Срок ссылки истёк. Запросите новый код на сайте.")
+            return True
+        if row.chat_id not in (None, chat_id):
+            call("sendMessage", chat_id=chat_id, text="Bu havola boshqa Telegram akkauntida ochilgan. Saytdan yangi kod oling va o‘z akkauntingizda oching. / Ссылка открыта другим Telegram-аккаунтом. Получите новую ссылку на сайте.")
             return True
         if row.code_digest:
             call("sendMessage", chat_id=chat_id, text="Kod yuqoridagi xabarda. Yangi kod kerak bo‘lsa, saytdan qayta so‘rang. / Код уже отправлен, новый можно запросить на сайте.")

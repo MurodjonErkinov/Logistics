@@ -34,3 +34,19 @@ Backend regression tests: `python manage.py test authentication.test_registratio
 `cd frontend && npm run test:e2e -- tests/landing.spec.ts`.
 These tests mock Telegram delivery; a final live check needs a real person pressing
 Start and sharing their contact in the configured bot.
+
+## Start link reported as invalid or expired
+
+Run only one polling instance per bot token. A local bot and a server bot with the
+same token compete for updates (`Telegram error 409`), and a Start update may reach
+the database that did not create its registration request. Use a separate test bot
+for local development, or stop the local `driver_bot` when testing the live site.
+Pausing Docker is temporary; starting the whole local stack again starts that bot.
+
+A missing request is now reported separately from an expired, consumed, or
+other-account link. `request_not_found` in the bot logs means the request is absent
+from that bot's database (for example, a superseded link or a different environment).
+After resolving duplicate polling, request a new code on the live site and use
+that latest Telegram link. If it still fails, compare web/bot database configuration
+and inspect `driver_bot` logs. Do not post bot tokens, database passwords or full
+verification URLs in diagnostic output.

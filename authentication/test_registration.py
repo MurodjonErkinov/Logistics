@@ -187,6 +187,33 @@ class RegistrationVerificationTests(TestCase):
         text = next(c.kwargs["text"] for c in reversed(call.call_args_list) if c.args[0] == "sendMessage")
         self.assertIn("Yuk joylash", text)
 
+    def test_start_reports_missing_expired_used_and_other_account_separately(self, call):
+        def last_text():
+            return next(c.kwargs["text"] for c in reversed(call.call_args_list) if c.args[0] == "sendMessage")
+        with self.assertLogs("authentication.telegram_verification", level="WARNING") as logs:
+            self.message(text=f"/start reg_{uuid.uuid4().hex}")
+        self.assertIn("request_not_found", logs.output[0])
+        self.assertIn("topilmadi", last_text())
+        row = self.start()
+        row.expires_at = timezone.now() - timedelta(seconds=1)
+        row.save()
+        self.message(text=f"/start reg_{row.verification_id.hex}")
+        self.assertIn("muddati tugagan", last_text())
+        row.consumed_at = timezone.now()
+        row.save()
+        self.message(text=f"/start reg_{row.verification_id.hex}")
+        self.assertIn("allaqachon tasdiqlangan", last_text())
+        row.consumed_at = None
+        row.expires_at = timezone.now() + timedelta(minutes=5)
+        row.chat_id = 999
+        row.save()
+        self.message(text=f"/start reg_{row.verification_id.hex}")
+        self.assertIn("boshqa Telegram", last_text())
+
+    def test_conflict_error_explains_duplicate_polling_without_echoing_api_data(self, call):
+        self.assertIn("another bot instance", str(BotError(409)))
+        self.assertIn("webhook is active", str(BotError(409, description="Conflict: webhook is active")))
+
 
 @skipUnlessDBFeature("has_select_for_update")
 class ConcurrentRegistrationTests(TransactionTestCase):
