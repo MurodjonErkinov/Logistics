@@ -12,6 +12,14 @@ const user = {
 };
 
 async function mockSession(page: Page) {
+  await page
+    .context()
+    .route("https://t.me/YukFlowTestBot**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>Telegram test</title>",
+      }),
+    );
   let signedIn = false;
   let account = { ...user };
   await page.route("**/api/auth/me/", (route) =>
@@ -189,11 +197,24 @@ test("dispatcher registration selects role and opens existing dashboard", async 
     .getByLabel("Foydalanuvchi nomi", { exact: true })
     .fill("new_dispatcher");
   await page.getByLabel("Telefon raqam").fill("+998901234567");
-  await page
-    .getByRole("button", { name: "Telegramdan kod olish", exact: true })
-    .click();
+  await page.getByLabel("Parol", { exact: true }).fill("Testing12345!");
+  const [telegram] = await Promise.all([
+    page.waitForEvent("popup"),
+    page
+      .getByRole("button", { name: "Telegramdan kod olish", exact: true })
+      .click(),
+  ]);
+  await expect(telegram).toHaveURL(
+    /https:\/\/t.me\/YukFlowTestBot\?start=reg_/,
+  );
+  expect(await telegram.evaluate(() => window.opener)).toBeNull();
+  await telegram.close();
+  await expect(page).toHaveURL(/\/register/);
+  await expect(page.getByLabel("Parol", { exact: true })).toHaveValue(
+    "Testing12345!",
+  );
   await expect(
-    page.getByRole("link", { name: "Telegram botni ochish" }),
+    page.getByRole("link", { name: "Telegramga o‘tish" }),
   ).toHaveAttribute("href", /https:\/\/t.me\/YukFlowTestBot/);
   await page.getByLabel("Tasdiqlash kodi", { exact: true }).fill("123456");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -284,6 +305,9 @@ test("registration verification resets when phone changes and handles unavailabl
   page,
 }) => {
   await mockSession(page);
+  await page.addInitScript(() => {
+    window.open = () => null;
+  });
   await page.goto("/register?role=driver");
   const phone = page.getByLabel("Telefon raqam", { exact: true });
   await phone.fill("+998901234567");
@@ -292,6 +316,9 @@ test("registration verification resets when phone changes and handles unavailabl
     .click();
   await expect(
     page.getByLabel("Tasdiqlash kodi", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Telegramga o‘tish" }),
   ).toBeVisible();
   await phone.fill("+998909999999");
   await expect(page.getByLabel("Tasdiqlash kodi", { exact: true })).toHaveCount(
@@ -314,4 +341,28 @@ test("registration verification resets when phone changes and handles unavailabl
   await expect(page.getByLabel("Tasdiqlash kodi", { exact: true })).toHaveCount(
     0,
   );
+});
+
+test("failed code request closes the temporary Telegram tab", async ({
+  page,
+}) => {
+  await mockSession(page);
+  await page.route("**/api/auth/registration-code/", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { detail: "Bot vaqtincha ishlamayapti." },
+    }),
+  );
+  await page.goto("/register");
+  await page.getByLabel("Telefon raqam", { exact: true }).fill("+998901234567");
+  await page
+    .getByRole("button", { name: "Telegramdan kod olish", exact: true })
+    .click();
+  await expect(page.locator(".error-box")).toContainText(
+    "Bot vaqtincha ishlamayapti.",
+  );
+  await expect.poll(() => page.context().pages().length).toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Telegramdan kod olish", exact: true }),
+  ).toBeEnabled();
 });

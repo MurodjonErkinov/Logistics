@@ -10,9 +10,9 @@ backend and bot environment. `DRIVER_BOT_USERNAME` is the bot's username, withou
 `make restart` runs migration `authentication.0004_registrationverification`,
 rebuilds the frontend/backend and starts the `driver_bot` service.
 
-1. Enter the Telegram phone number on `/register` and request a code.
-2. Open the returned bot link, press Start and share your own number with the
-   contact button. Typed numbers and contacts belonging to other users are rejected.
+1. Enter the Telegram phone number on `/register` and request a code. The click
+   opens Telegram automatically in a new tab, preserving the registration form.
+2. Press Start and share your own number with the contact button. Typed numbers and contacts belonging to other users are rejected.
 3. Enter the six-digit code and complete registration. The Telegram account is
    automatically linked; drivers can receive their existing ticket notifications.
 

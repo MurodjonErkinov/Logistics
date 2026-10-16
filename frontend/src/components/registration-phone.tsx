@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Send, ShieldCheck } from "lucide-react";
+import { Send, ShieldCheck } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
 import { useLocale } from "./locale";
 import { ErrorBox, Field } from "./ui";
@@ -33,6 +33,20 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
   async function requestCode() {
     setError("");
     setBusy(true);
+    // Open during the click so mobile popup blockers allow the Telegram tab.
+    // The registration form stays open with all fields, including the password.
+    const telegram = window.open("about:blank", "_blank");
+    if (telegram) {
+      telegram.opener = null;
+      telegram.document.title = c(
+        "Telegram ochilmoqda…",
+        "Открываем Telegram…",
+      );
+      telegram.document.body.textContent = c(
+        "Telegram ochilmoqda…",
+        "Открываем Telegram…",
+      );
+    }
     try {
       const result = await api<Challenge>("auth/registration-code/", {
         method: "POST",
@@ -41,7 +55,10 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
       setChallenge(result);
       setCode("");
       setRetryAt(Date.now() + result.retry_after * 1000);
+      if (telegram && !telegram.closed)
+        telegram.location.replace(result.bot_url);
     } catch (e) {
+      if (telegram && !telegram.closed) telegram.close();
       setError(errorMessage(e));
     } finally {
       setBusy(false);
@@ -74,46 +91,36 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
           }}
         />
       </Field>
-      <button
-        type="button"
-        className={styles.request}
-        disabled={
-          disabled ||
-          busy ||
-          remaining > 0 ||
-          !/^\+[1-9][0-9]{7,14}$/.test(phone)
-        }
-        onClick={requestCode}
-      >
-        <Send size={17} />
-        {busy
-          ? c("Kutilmoqda…", "Подождите…")
-          : remaining
-            ? c(
-                `Qayta so‘rash: ${remaining} s`,
-                `Повторить через ${remaining} с`,
-              )
-            : challenge
-              ? c("Yangi kod olish", "Получить новый код")
-              : c("Telegramdan kod olish", "Получить код в Telegram")}
-      </button>
+      {challenge ? (
+        <a
+          href={challenge.bot_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={styles.open}
+        >
+          <Send size={17} />
+          {c("Telegramga o‘tish", "Перейти в Telegram")}
+        </a>
+      ) : (
+        <button
+          type="button"
+          className={styles.request}
+          disabled={disabled || busy || !/^\+[1-9][0-9]{7,14}$/.test(phone)}
+          onClick={requestCode}
+        >
+          <Send size={17} />
+          {busy
+            ? c("Telegram ochilmoqda…", "Открываем Telegram…")
+            : c("Telegramdan kod olish", "Получить код в Telegram")}
+        </button>
+      )}
       <ErrorBox message={error} />
       {challenge && (
         <div className={styles.steps}>
-          <a
-            href={challenge.bot_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.open}
-          >
-            <Send size={18} />
-            {c("Telegram botni ochish", "Открыть Telegram-бота")}
-            <ExternalLink size={15} />
-          </a>
           <p>
             {c(
-              "Botda Start bosing va “Telefon raqamimni yuborish” tugmasi orqali raqamingizni ulashing. Bot bergan kodni quyida kiriting.",
-              "Нажмите Start в боте и отправьте свой номер кнопкой. Введите полученный код ниже.",
+              "Telegramda Start → raqamni ulash. Kelgan kodni shu yerga kiriting.",
+              "В Telegram: Start → отправить номер. Введите полученный код здесь.",
             )}
           </p>
           <Field
@@ -141,6 +148,16 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
               }
             />
           </Field>
+          <button
+            type="button"
+            className={styles.resend}
+            disabled={disabled || busy || remaining > 0}
+            onClick={requestCode}
+          >
+            {remaining
+              ? c(`Yangi kod: ${remaining} s`, `Новый код через ${remaining} с`)
+              : c("Yangi kod olish", "Получить новый код")}
+          </button>
           <input
             type="hidden"
             name="verification_id"

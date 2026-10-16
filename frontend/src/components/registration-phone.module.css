@@ -33,6 +33,7 @@
   background: #f8faf7;
 }
 .open {
+  display: flex;
   background: #2089b5;
   color: #fff;
   border-color: #2089b5;
@@ -56,4 +57,20 @@
   letter-spacing: 0.25em;
   font-size: 22px;
   font-weight: 700;
+}
+
+.resend {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #1f647e;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  justify-self: start;
+}
+.resend:disabled {
+  color: #8c9993;
+  cursor: default;
 }
