@@ -62,7 +62,7 @@ class LoadSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         if self.instance is None:
             if company is not None and not request.user.is_staff:
-                membership = CompanyMember.objects.filter(company=company, user=request.user).first()
+                membership = CompanyMember.objects.active().filter(company=company, user=request.user).first()
                 if membership is None or not (membership.role == CompanyMember.Role.OWNER or membership.can_post_cargo):
                     raise serializers.ValidationError({"company": "You cannot post for this company."})
         elif "company" in attrs and company != self.instance.company:

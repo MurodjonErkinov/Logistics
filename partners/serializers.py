@@ -12,7 +12,7 @@ class CompanySerializer(serializers.ModelSerializer):
 
     def membership(self, obj):
         user = self.context["request"].user
-        return next((member for member in obj.memberships.all() if member.user_id == user.pk), None)
+        return next((member for member in obj.memberships.all() if member.user_id == user.pk and member.accepted_at), None)
 
     def get_my_role(self, obj):
         member = self.membership(obj)
@@ -38,12 +38,16 @@ class CompanyMemberSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     user_username = serializers.CharField(source="user.username", read_only=True)
     company_id = serializers.IntegerField(source="company.id", read_only=True)
+    accepted = serializers.SerializerMethodField()
+
+    def get_accepted(self, obj):
+        return obj.accepted_at is not None
 
     class Meta:
         model = CompanyMember
         fields = (
             "id", "company_id", "user_id", "user_username", "username",
-            "role", "can_post_cargo", "joined_at",
+            "role", "can_post_cargo", "joined_at", "accepted",
         )
         read_only_fields = ("id", "company_id", "user_id", "user_username", "joined_at")
 
@@ -57,7 +61,7 @@ class CompanyMemberSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"username": "Active user not found."})
             company = self.context["company"]
             if CompanyMember.objects.filter(company=company, user=user).exists():
-                raise serializers.ValidationError({"username": "User is already a member."})
+                raise serializers.ValidationError({"username": "User is already a member or has a pending invitation."})
             attrs["user"] = user
             attrs.pop("username", None)
         elif "username" in attrs:
@@ -66,3 +70,13 @@ class CompanyMemberSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return CompanyMember.objects.create(company=self.context["company"], **validated_data)
+
+
+class InvitationSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source="company.name", read_only=True)
+    invited_at = serializers.DateTimeField(source="joined_at", read_only=True)
+
+    class Meta:
+        model = CompanyMember
+        fields = ("id", "company_id", "company_name", "role", "can_post_cargo", "invited_at")
+        read_only_fields = fields

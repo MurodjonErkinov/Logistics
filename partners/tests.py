@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Company, CompanyMember
@@ -58,6 +59,9 @@ class PartnersTests(TestCase):
         self.assertEqual(self.client.get(members_url).status_code, 200)
         self.assertEqual(self.client.get(member_url).status_code, 200)
         self.as_user(self.member)
+        # An invitation grants nothing until the invited user accepts it.
+        self.assertEqual(self.client.get(members_url).status_code, 403)
+        self.assertEqual(self.client.post(f"/api/partners/invitations/{added.data['id']}/accept/").status_code, 204)
         self.assertEqual(self.client.get(members_url).status_code, 200)
         self.assertEqual(self.client.patch(member_url, {"role": "owner"}).status_code, 403)
         self.as_user(self.owner)
@@ -85,7 +89,7 @@ class PartnersTests(TestCase):
         self.assertTrue(owner_data[0]["can_post_cargo"])
         self.as_user(self.outsider)
         self.assertEqual(self.client.get("/api/partners/companies/?mine=1").data, [])
-        CompanyMember.objects.create(company_id=company_id, user=self.member, can_post_cargo=False)
+        CompanyMember.objects.create(company_id=company_id, user=self.member, can_post_cargo=False, accepted_at=timezone.now())
         self.as_user(self.member)
         member_data = self.client.get("/api/partners/companies/?mine=1").data
         self.assertEqual(member_data[0]["my_role"], "member")
@@ -96,3 +100,35 @@ class PartnersTests(TestCase):
         self.as_user(self.outsider)
         self.assertEqual(self.client.get("/api/partners/companies/").data, [])
         self.assertEqual(self.client.get(f"/api/partners/companies/{company_id}/").status_code, 404)
+
+    def test_invitation_must_be_accepted_by_the_invited_user(self):
+        company_id = self.create_company()
+        members_url = f"/api/partners/companies/{company_id}/members/"
+        invite = self.client.post(members_url, {"username": "member", "role": "owner", "can_post_cargo": True})
+        self.assertEqual(invite.status_code, 201)
+        self.assertFalse(invite.data["accepted"])
+        # A pending owner invite is not counted as an owner and can be withdrawn.
+        self.assertEqual(self.client.delete(f"{members_url}{invite.data['id']}/").status_code, 204)
+        invite = self.client.post(members_url, {"username": "member", "can_post_cargo": True})
+        invitation_url = f"/api/partners/invitations/{invite.data['id']}/"
+        self.as_user(self.outsider)
+        self.assertEqual(self.client.get("/api/partners/invitations/").data, [])
+        self.assertEqual(self.client.post(f"{invitation_url}accept/").status_code, 404)
+        self.as_user(self.member)
+        self.assertEqual(self.client.get("/api/partners/companies/?mine=1").data, [])
+        pending = self.client.get("/api/partners/invitations/").data
+        self.assertEqual([(item["id"], item["company_name"]) for item in pending], [(invite.data["id"], "Silk Road Logistics")])
+        load = {"origin": "Andijon", "destination": "Namangan", "cargo_name": "Un", "vehicle_type": "Tent",
+                "weight_tons": "1", "contact_phone": "938086599", "company": company_id}
+        rejected = self.client.post("/api/cargo/loads/", load, format="json")
+        self.assertEqual(rejected.data, {"company": ["You cannot post for this company."]})
+        self.assertEqual(self.client.delete(invitation_url).status_code, 204)
+        self.assertFalse(CompanyMember.objects.filter(company_id=company_id, user=self.member).exists())
+        self.as_user(self.owner)
+        invite = self.client.post(members_url, {"username": "member", "can_post_cargo": True})
+        self.as_user(self.member)
+        self.assertEqual(self.client.post(f"/api/partners/invitations/{invite.data['id']}/accept/").status_code, 204)
+        self.assertEqual(self.client.get("/api/partners/invitations/").data, [])
+        self.assertEqual(self.client.get("/api/partners/companies/?mine=1").data[0]["my_role"], "member")
+        created = self.client.post("/api/cargo/loads/", load, format="json")
+        self.assertEqual(created.status_code, 201, created.data)

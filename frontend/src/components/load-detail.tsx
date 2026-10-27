@@ -214,7 +214,11 @@ export function LoadDetail({ id }: { id: string }) {
                 <Building2 size={20} />
               </span>
               <div>
-                <strong>{load.company_name || load.posted_by_username || t("Foydalanuvchi")}</strong>
+                <strong>
+                  {load.company_name ||
+                    load.posted_by_username ||
+                    t("Foydalanuvchi")}
+                </strong>
                 <small>
                   {load.company
                     ? t("Kompaniya")

@@ -17,5 +17,5 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(CompanyMember)
 class CompanyMemberAdmin(admin.ModelAdmin):
-    list_display = ("id", "company", "user", "role", "can_post_cargo")
+    list_display = ("id", "company", "user", "role", "can_post_cargo", "accepted_at")
     list_filter = ("role", "can_post_cargo")

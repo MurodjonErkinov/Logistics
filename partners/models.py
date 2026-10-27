@@ -25,7 +25,14 @@ class Company(models.Model):
         return self.name
 
 
+class CompanyMemberQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(accepted_at__isnull=False)
+
+
 class CompanyMember(models.Model):
+    """A membership is an invitation until the invited user accepts it."""
+
     class Role(models.TextChoices):
         OWNER = "owner", "Owner"
         MEMBER = "member", "Member"
@@ -35,6 +42,8 @@ class CompanyMember(models.Model):
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.MEMBER)
     can_post_cargo = models.BooleanField(default=False)
     joined_at = models.DateTimeField(auto_now_add=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    objects = CompanyMemberQuerySet.as_manager()
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=("company", "user"), name="unique_company_member")]

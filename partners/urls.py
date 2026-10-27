@@ -1,10 +1,11 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import CompanyMemberViewSet, CompanyViewSet
+from .views import CompanyMemberViewSet, CompanyViewSet, InvitationViewSet
 
 router = DefaultRouter()
 router.register("companies", CompanyViewSet, basename="companies")
+router.register("invitations", InvitationViewSet, basename="invitations")
 
 member_list = CompanyMemberViewSet.as_view({"get": "list", "post": "create"})
 member_detail = CompanyMemberViewSet.as_view({

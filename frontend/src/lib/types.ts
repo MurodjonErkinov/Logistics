@@ -53,6 +53,15 @@ export type Member = {
   user_username: string;
   role: "owner" | "member";
   can_post_cargo: boolean;
+  accepted: boolean;
+};
+export type Invitation = {
+  id: number;
+  company_id: number;
+  company_name: string;
+  role: "owner" | "member";
+  can_post_cargo: boolean;
+  invited_at: string;
 };
 export const roleNames: Record<User["role"], string> = {
   user: "Yuk jo‘natuvchi",

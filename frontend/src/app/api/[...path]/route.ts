@@ -65,7 +65,7 @@ async function handle(
   const { path } = await context.params;
   const route = path.join("/");
   if (
-    !/^(auth\/(login|register|registration-code|password-reset-code|reset-password|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences)|partners\/companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?)$/.test(
+    !/^(auth\/(login|register|registration-code|password-reset-code|reset-password|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences)|partners\/(?:companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?|invitations(?:\/\d+(?:\/accept)?)?))$/.test(
       route,
     )
   ) {

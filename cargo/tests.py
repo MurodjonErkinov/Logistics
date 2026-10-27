@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from partners.models import Company, CompanyMember
@@ -16,8 +17,8 @@ class LoadTests(TestCase):
         self.member = user_model.objects.create_user(username="member", password="StrongPass123!")
         self.outsider = user_model.objects.create_user(username="outsider", password="StrongPass123!")
         self.company = Company.objects.create(name="Silk Road Logistics", created_by=self.owner)
-        CompanyMember.objects.create(company=self.company, user=self.owner, role="owner", can_post_cargo=True)
-        CompanyMember.objects.create(company=self.company, user=self.member, role="member", can_post_cargo=False)
+        CompanyMember.objects.create(company=self.company, user=self.owner, role="owner", can_post_cargo=True, accepted_at=timezone.now())
+        CompanyMember.objects.create(company=self.company, user=self.member, role="member", can_post_cargo=False, accepted_at=timezone.now())
         self.client = APIClient()
         self.payload = {
             "origin": "Andijon",

@@ -1,14 +1,17 @@
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, viewsets
+from django.utils import timezone
+from rest_framework import mixins, permissions, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from .models import Company, CompanyMember
-from .serializers import CompanyMemberSerializer, CompanySerializer
+from .serializers import CompanyMemberSerializer, CompanySerializer, InvitationSerializer
 
 
 def is_owner(company, user):
-    return user.is_staff or company.memberships.filter(user=user, role=CompanyMember.Role.OWNER).exists()
+    return user.is_staff or company.memberships.active().filter(user=user, role=CompanyMember.Role.OWNER).exists()
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
@@ -19,7 +22,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         if self.action in ("list", "retrieve") and (not self.request.user.is_staff or self.request.query_params.get("mine") == "1"):
-            queryset = queryset.filter(memberships__user=self.request.user)
+            queryset = queryset.filter(memberships__user=self.request.user, memberships__accepted_at__isnull=False)
         return queryset
 
     @transaction.atomic
@@ -27,7 +30,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
         company = serializer.save(created_by=self.request.user)
         CompanyMember.objects.create(
             company=company, user=self.request.user,
-            role=CompanyMember.Role.OWNER, can_post_cargo=True,
+            role=CompanyMember.Role.OWNER, can_post_cargo=True, accepted_at=timezone.now(),
         )
 
     def perform_update(self, serializer):
@@ -48,7 +51,7 @@ class CompanyMemberViewSet(viewsets.ModelViewSet):
     def get_company(self):
         company = get_object_or_404(Company, pk=self.kwargs["company_pk"])
         user = self.request.user
-        if not user.is_staff and not company.memberships.filter(user=user).exists():
+        if not user.is_staff and not company.memberships.active().filter(user=user).exists():
             raise PermissionDenied("You are not a member of this company.")
         if self.request.method not in permissions.SAFE_METHODS and not is_owner(company, user):
             raise PermissionDenied("Only a company owner can manage members.")
@@ -64,13 +67,30 @@ class CompanyMemberViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         member = serializer.instance
-        if member.role == CompanyMember.Role.OWNER and serializer.validated_data.get("role") == CompanyMember.Role.MEMBER:
-            if member.company.memberships.filter(role=CompanyMember.Role.OWNER).count() == 1:
+        if member.accepted_at and member.role == CompanyMember.Role.OWNER and serializer.validated_data.get("role") == CompanyMember.Role.MEMBER:
+            if member.company.memberships.active().filter(role=CompanyMember.Role.OWNER).count() == 1:
                 raise ValidationError({"role": "The last owner cannot be demoted."})
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.role == CompanyMember.Role.OWNER:
-            if instance.company.memberships.filter(role=CompanyMember.Role.OWNER).count() == 1:
+        if instance.accepted_at and instance.role == CompanyMember.Role.OWNER:
+            if instance.company.memberships.active().filter(role=CompanyMember.Role.OWNER).count() == 1:
                 raise ValidationError({"role": "The last owner cannot be removed."})
         instance.delete()
+
+
+class InvitationViewSet(mixins.ListModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Pending company invitations of the current user: accept or decline (DELETE)."""
+
+    serializer_class = InvitationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return CompanyMember.objects.filter(user=self.request.user, accepted_at__isnull=True).select_related("company").order_by("-joined_at")
+
+    @action(detail=True, methods=["post"])
+    def accept(self, request, pk=None):
+        invitation = self.get_object()
+        invitation.accepted_at = timezone.now()
+        invitation.save(update_fields=["accepted_at"])
+        return Response(status=204)

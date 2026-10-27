@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
-import type { Company, Member } from "@/lib/types";
+import type { Company, Invitation, Member } from "@/lib/types";
 import { Empty, ErrorBox, Field, Loading, Protected } from "@/components/ui";
 import { useSession } from "@/components/session";
 export default function Companies() {
@@ -29,6 +29,7 @@ function Content() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selected, setSelected] = useState<Company | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [create, setCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [memberLoading, setMemberLoading] = useState(false);
@@ -37,7 +38,12 @@ function Content() {
   const canManage = selected?.my_role === "owner" || user?.is_staff;
   async function refresh() {
     try {
-      setCompanies(await api<Company[]>("partners/companies/?mine=1"));
+      const [mine, pending] = await Promise.all([
+        api<Company[]>("partners/companies/?mine=1"),
+        api<Invitation[]>("partners/invitations/"),
+      ]);
+      setCompanies(mine);
+      setInvitations(pending);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -106,6 +112,21 @@ function Content() {
       setBusy(false);
     }
   }
+  async function respond(invitation: Invitation, accept: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      await api(
+        `partners/invitations/${invitation.id}/${accept ? "accept/" : ""}`,
+        { method: accept ? "POST" : "DELETE" },
+      );
+      await refresh();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function changeMember(member: Member, remove = false) {
     if (!selected) return;
     if (
@@ -155,6 +176,49 @@ function Content() {
         </button>
       </div>
       <ErrorBox message={error} />
+      {invitations.length > 0 && (
+        <section className="form-section">
+          <h2>
+            <Users size={20} />
+            {t("Kompaniyaga takliflar")}
+          </h2>
+          <div className="member-list">
+            {invitations.map((invitation) => (
+              <div className="member-row" key={invitation.id}>
+                <span className="avatar small">
+                  <Building2 size={16} />
+                </span>
+                <div>
+                  <strong>{invitation.company_name}</strong>
+                  <small>
+                    {invitation.role === "owner"
+                      ? t("Kompaniya egasi")
+                      : t("A’zo")}
+                    {invitation.can_post_cargo && ` · ${t("Yuk joylay oladi")}`}
+                  </small>
+                </div>
+                <button
+                  className="button primary"
+                  disabled={busy}
+                  onClick={() => void respond(invitation, true)}
+                >
+                  <Check size={16} />
+                  {t("Qabul qilish")}
+                </button>
+                <button
+                  className="icon-button danger"
+                  aria-label={t("Rad etish")}
+                  title={t("Rad etish")}
+                  disabled={busy}
+                  onClick={() => void respond(invitation, false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       {loading ? (
         <Loading />
       ) : (
@@ -287,6 +351,8 @@ function Content() {
                               {member.role === "owner"
                                 ? t("Kompaniya egasi")
                                 : t("A’zo")}
+                              {!member.accepted &&
+                                ` · ${t("Taklif kutilmoqda")}`}
                             </small>
                           </div>
                           {canManage && member.role !== "owner" ? (
@@ -324,7 +390,12 @@ function Content() {
                   {canManage && (
                     <form className="add-member" onSubmit={addMember}>
                       <h3>{t("Jamoaga qo‘shish")}</h3>
-                      <Field label={t("Foydalanuvchi nomi")}>
+                      <Field
+                        label={t("Foydalanuvchi nomi")}
+                        hint={t(
+                          "Foydalanuvchi taklifni qabul qilgach, jamoa a’zosi bo‘ladi.",
+                        )}
+                      >
                         <input
                           name="username"
                           required
@@ -337,7 +408,7 @@ function Content() {
                       </label>
                       <button className="button secondary" disabled={busy}>
                         <Plus size={17} />
-                        {t("A’zo qo‘shish")}
+                        {t("Taklif yuborish")}
                       </button>
                     </form>
                   )}

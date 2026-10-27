@@ -28,7 +28,7 @@ class LoadViewSet(viewsets.ModelViewSet):
         if params.get("mine") == "1":
             if not self.request.user.is_authenticated:
                 raise NotAuthenticated()
-            owned = CompanyMember.objects.filter(user=self.request.user, role=CompanyMember.Role.OWNER).values("company_id")
+            owned = CompanyMember.objects.active().filter(user=self.request.user, role=CompanyMember.Role.OWNER).values("company_id")
             queryset = queryset.filter(Q(posted_by=self.request.user) | Q(company_id__in=owned))
         if params.get("ids") is not None:
             ids = [int(value) for value in params["ids"].split(",")[:MAX_IDS] if value.isdigit()]
@@ -50,7 +50,7 @@ class LoadViewSet(viewsets.ModelViewSet):
             return True
         if load.company_id is None:
             return load.posted_by_id == user.pk
-        membership = CompanyMember.objects.filter(company=load.company, user=user).first()
+        membership = CompanyMember.objects.active().filter(company=load.company, user=user).first()
         return membership is not None and (
             membership.role == CompanyMember.Role.OWNER
             or (load.posted_by_id == user.pk and membership.can_post_cargo)
