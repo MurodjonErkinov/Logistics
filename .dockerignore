@@ -10,8 +10,9 @@
 staticfiles
 media
 
-frontend/node_modules
-frontend/.next
+# The frontend image builds from ./frontend with its own .dockerignore.
+frontend
+*.md
 .env.*
 .telegram_session
 backups
