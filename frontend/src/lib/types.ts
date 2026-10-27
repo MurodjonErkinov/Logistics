@@ -30,7 +30,7 @@ export type Load = {
   pickup_date: string | null;
   notes: string;
   status: "open" | "closed";
-  posted_by: number;
+  posted_by: number | null;
   posted_by_username: string;
   company: number | null;
   company_name?: string;

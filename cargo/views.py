@@ -8,6 +8,9 @@ from partners.models import CompanyMember
 from .models import Load
 from .serializers import LoadSerializer
 
+LIST_LIMIT = 500
+MAX_IDS = 200
+
 
 class LoadViewSet(viewsets.ModelViewSet):
     queryset = Load.objects.select_related("posted_by", "company", "telegram_entry__post").all()
@@ -27,7 +30,11 @@ class LoadViewSet(viewsets.ModelViewSet):
                 raise NotAuthenticated()
             owned = CompanyMember.objects.filter(user=self.request.user, role=CompanyMember.Role.OWNER).values("company_id")
             queryset = queryset.filter(Q(posted_by=self.request.user) | Q(company_id__in=owned))
-        return queryset
+        if params.get("ids") is not None:
+            ids = [int(value) for value in params["ids"].split(",")[:MAX_IDS] if value.isdigit()]
+            queryset = queryset.filter(pk__in=ids)
+        # The frontend filters client-side; bound the response to the newest loads.
+        return queryset[:LIST_LIMIT]
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):

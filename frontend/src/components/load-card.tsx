@@ -96,7 +96,9 @@ export function LoadCard({
         <Building2 size={13} />
         <span>
           {load.company_name ||
-            (load.source_url ? t("Telegram e’loni") : load.posted_by_username)}
+            (load.source_url
+              ? t("Telegram e’loni")
+              : load.posted_by_username || t("Foydalanuvchi"))}
         </span>
         {load.source_url && <span className="source-tag">Telegram</span>}
       </div>

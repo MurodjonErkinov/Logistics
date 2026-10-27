@@ -23,6 +23,9 @@ class LoadSerializer(serializers.ModelSerializer):
             data["contact_phone"] = ""
             data["alternate_phone"] = ""
             data["display_text"] = ""
+            # Usernames are login names; do not publish them to anonymous visitors.
+            data["posted_by"] = None
+            data["posted_by_username"] = ""
         return data
 
     class Meta:

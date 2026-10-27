@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -98,9 +100,22 @@ class LoadTests(TestCase):
         self.assertEqual(public.data["contact_phone"], "")
         self.assertEqual(public.data["alternate_phone"], "")
         self.assertEqual(public.data["display_text"], "")
+        self.assertIsNone(public.data["posted_by"])
+        self.assertEqual(public.data["posted_by_username"], "")
         self.assertEqual(self.client.get("/api/cargo/loads/?mine=1").status_code, 401)
         self.as_user(self.outsider)
         private = self.client.get(f"/api/cargo/loads/{own_id}/")
         self.assertEqual(private.data["contact_phone"], self.payload["contact_phone"])
+        self.assertEqual(private.data["posted_by_username"], "outsider")
         self.client.patch(f"/api/cargo/loads/{own_id}/", {"status": "closed"})
         self.assertNotIn(own_id, [item["id"] for item in self.client.get("/api/cargo/loads/?status=open").data])
+
+    def test_list_filters_by_ids_and_is_bounded(self):
+        loads = Load.objects.bulk_create(Load(posted_by=self.owner, **{**self.payload, "weight_tons": 1}) for _ in range(3))
+        ids = ",".join(str(load.pk) for load in loads[:2])
+        response = self.client.get(f"/api/cargo/loads/?ids={ids},abc")
+        self.assertEqual(sorted(item["id"] for item in response.data), sorted(load.pk for load in loads[:2]))
+        self.assertEqual(self.client.get("/api/cargo/loads/?ids=").data, [])
+        with patch("cargo.views.LIST_LIMIT", 2):
+            newest = self.client.get("/api/cargo/loads/").data
+        self.assertEqual([item["id"] for item in newest], [loads[2].pk, loads[1].pk])

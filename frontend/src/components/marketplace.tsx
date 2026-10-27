@@ -57,7 +57,11 @@ export function Marketplace({ onlySaved = false }: { onlySaved?: boolean }) {
     if (!quiet) setLoading(true);
     try {
       setLoads(
-        await api<Load[]>(`cargo/loads/${onlySaved ? "" : "?status=open"}`),
+        onlySaved && !saved.length
+          ? []
+          : await api<Load[]>(
+              `cargo/loads/?${onlySaved ? `ids=${saved.join(",")}` : "status=open"}`,
+            ),
       );
     } catch (e) {
       setError(errorMessage(e));
@@ -71,7 +75,7 @@ export function Marketplace({ onlySaved = false }: { onlySaved?: boolean }) {
       if (!document.hidden) void refresh(true);
     }, 60000);
     return () => clearInterval(timer);
-  }, [user?.id, onlySaved]);
+  }, [user?.id, onlySaved, onlySaved && saved.join(",")]);
   const visible = useMemo(() => {
     const match = (value: string, query: string) =>
       value.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());

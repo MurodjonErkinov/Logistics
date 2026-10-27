@@ -357,7 +357,9 @@ function WorkspaceContent() {
                   <span className="eyebrow">{t("TANLANGAN YUK")}</span>
                   <h2>{selected.cargo_name}</h2>
                   <p>
-                    {selected.company_name || selected.posted_by_username}
+                    {selected.company_name ||
+                      selected.posted_by_username ||
+                      t("Foydalanuvchi")}
                     {selected.pickup_date
                       ? ` · ${dateLabel(selected.pickup_date, locale)}`
                       : ""}
