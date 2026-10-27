@@ -91,7 +91,9 @@ class ProfileSerializer(UserSerializer):
 
     class Meta(UserSerializer.Meta):
         fields = ("id", "username", "email", "first_name", "last_name", "phone_number", "role", "is_staff", "password", "current_password")
-        read_only_fields = ("id", "username", "is_staff")
+        # The phone is verified via Telegram at registration and identifies the
+        # account for password reset, so users cannot change it here.
+        read_only_fields = ("id", "username", "is_staff", "phone_number")
 
     role = serializers.CharField(read_only=True)
 

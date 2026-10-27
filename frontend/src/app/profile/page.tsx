@@ -98,14 +98,13 @@ function Content() {
                 />
               </Field>
             </div>
-            <Field label={t("Telefon raqam")}>
-              <input
-                name="phone_number"
-                type="tel"
-                defaultValue={user.phone_number}
-                placeholder="+998901234567"
-                autoComplete="tel"
-              />
+            <Field
+              label={t("Telefon raqam")}
+              hint={t(
+                "Raqam Telegram orqali tasdiqlangan, uni o‘zgartirib bo‘lmaydi.",
+              )}
+            >
+              <input type="tel" value={user.phone_number || "—"} readOnly />
             </Field>
             <Field label={t("Elektron pochta")}>
               <input

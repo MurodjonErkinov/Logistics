@@ -40,7 +40,8 @@ class AuthenticationTests(TestCase):
         self.assertEqual(self.user.first_name, "Ali")
         self.assertFalse(self.user.is_staff)
         self.assertEqual(self.user.role, "user")
-        self.assertEqual(self.user.phone_number, "+998911112233")
+        # The Telegram-verified phone cannot be replaced from the profile.
+        self.assertEqual(self.user.phone_number, "")
 
         admin = get_user_model().objects.create_superuser(username="admin", password="AdminPass123!")
         self.assertEqual(admin.role, "admin")
