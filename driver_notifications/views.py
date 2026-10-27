@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from .models import MatchState, Notification, Preference, TelegramAccount, Ticket, Vehicle
 from .serializers import NotificationSerializer, PreferenceSerializer, TicketSerializer, VehicleSerializer
-from .service import new_link, notify, scan_ticket
+from .service import notify, scan_ticket
 
 
 class IsDriver(permissions.BasePermission):
@@ -125,7 +125,7 @@ class PreferenceView(APIView):
         obj, _ = Preference.objects.get_or_create(owner=request.user)
         result = dict(PreferenceSerializer(obj).data)
         account = TelegramAccount.objects.filter(owner=request.user).first()
-        result.update(telegram_connected=bool(account), telegram_blocked=bool(account and account.blocked), bot_configured=bool(os.getenv("DRIVER_BOT_TOKEN") and os.getenv("DRIVER_BOT_USERNAME")))
+        result.update(telegram_connected=bool(account), telegram_blocked=bool(account and account.blocked), bot_configured=bool(os.getenv("DRIVER_BOT_TOKEN")))
         return Response(result)
 
     def patch(self, request):
@@ -134,19 +134,3 @@ class PreferenceView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
-
-
-class TelegramLinkView(APIView):
-    permission_classes = [IsDriver]
-
-    def post(self, request):
-        username = os.getenv("DRIVER_BOT_USERNAME", "").lstrip("@")
-        if not username or not os.getenv("DRIVER_BOT_TOKEN"):
-            return Response({"detail": "Telegram bot is not configured on the server."}, status=503)
-        return Response({"url": f"https://t.me/{username}?start={new_link(request.user)}", "expires_in": 600})
-
-    def delete(self, request):
-        from .models import LinkToken
-        TelegramAccount.objects.filter(owner=request.user).delete()
-        LinkToken.objects.filter(owner=request.user).delete()
-        return Response(status=204)

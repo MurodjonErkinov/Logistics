@@ -60,7 +60,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   ];
   if (path === "/" && (loading || !user)) return <>{children}</>;
 
-  const authPage = path === "/login" || path === "/register";
+  const authPage =
+    path === "/login" || path === "/register" || path === "/forgot-password";
   if (authPage)
     return (
       <main className="auth-root">

@@ -16,7 +16,7 @@ from django.http import Http404
 from .locations import LocationError, parse_location
 from .models import MatchState, Notification, Preference, TelegramAccount, Ticket, Vehicle
 from .serializers import PreferenceSerializer, TicketSerializer, VehicleSerializer
-from .service import bind_account, notify, scan_ticket
+from .service import notify, scan_ticket
 
 
 class BotError(Exception):
@@ -87,7 +87,7 @@ def say(account, uz, ru=None, **kwargs):
 
 TICKET_STEPS = ["title", "vehicle", "current_location", "origins", "origin_points", "origin_radius", "route_mode", "destinations", "destination_points", "prices", "etas", "priorities", "radii", "ready_at", "expires_at", "available_tons", "partial_load", "currency", "price_basis", "min_price", "match_mode", "waypoints", "notes", "confirm"]
 VEHICLE_STEPS = ["name", "kind", "capacity_tons", "volume_m3", "plate", "confirm"]
-PREFERENCE_STEPS = ["language", "telegram_enabled", "partial_interval_minutes", "quiet_start", "quiet_end", "timezone", "confirm"]
+PREFERENCE_STEPS = ["language", "partial_interval_minutes", "quiet_start", "quiet_end", "timezone", "confirm"]
 PROMPTS = {
     "title": ("Tiket nomi?", "Название заявки?"),
     "vehicle": ("Avtomobil raqamini tanlang:", "Выберите номер автомобиля:"),
@@ -118,7 +118,6 @@ PROMPTS = {
     "volume_m3": ("Hajmi m³ yoki -.", "Объём м³ или -."),
     "plate": ("Davlat raqami yoki -.", "Госномер или -."),
     "language": ("Til: uz / ru", "Язык: uz / ru"),
-    "telegram_enabled": ("Telegram xabarlari: ha / yoq", "Уведомления Telegram: да / нет"),
     "partial_interval_minutes": ("Qisman mos yuklar jamlanmasi: 0, 15, 30 yoki 60 daqiqa.", "Интервал подборки частичных совпадений: 0, 15, 30 или 60 минут."),
     "quiet_start": ("Tinch vaqt boshlanishi HH:MM yoki -.", "Начало тихих часов HH:MM или -."),
     "quiet_end": ("Tinch vaqt tugashi HH:MM yoki -.", "Конец тихих часов HH:MM или -."),
@@ -185,8 +184,6 @@ def confirmation(account):
             lines.append(f"{title} {datetime.fromisoformat(data[key]).astimezone(ZoneInfo('Asia/Tashkent')):%Y-%m-%d %H:%M} (Toshkent)")
     if "partial_load" in data:
         lines.append(("Догруз: " if ru else "Qo‘shimcha yuk: ") + label("ha" if data["partial_load"] else "yoq", ru))
-    if "telegram_enabled" in data:
-        lines.append("Telegram: " + label("ha" if data["telegram_enabled"] else "yoq", ru))
     return "\n".join(lines)
 
 
@@ -195,10 +192,11 @@ def steps(state):
 
 
 def public_keyboard():
-    rows = [[{"text": "🔗 Akkauntni ulash / Подключить аккаунт", "callback_data": "nav:link"}]]
+    rows = []
     site = os.getenv("PUBLIC_SITE_URL", "").rstrip("/")
     if site.startswith("https://"):
-        rows.append([{"text": "🌐 Sayt / Сайт", "url": f"{site}/driver/tickets"}])
+        rows.append([{"text": "📝 Ro‘yxatdan o‘tish / Регистрация", "url": f"{site}/register"}])
+        rows.append([{"text": "🌐 Sayt / Сайт", "url": site}])
     return {"inline_keyboard": rows}
 
 
@@ -222,7 +220,7 @@ def inline_keyboard(account, ru=False):
         return {"text": title or label(value, ru), "callback_data": f"u:{nonce}:{value}"}
     rows = []
     if not state.get("pending_place"):
-        choices = {"route_mode": ["alternatives", "ordered", "anywhere"], "kind": ["tent", "van", "refrigerator", "isothermal", "flatbed", "tanker", "dump", "lowbed", "container", "other"], "currency": ["UZS", "USD"], "price_basis": ["trip", "ton"], "match_mode": ["any_two", "route", "full"], "partial_load": ["ha", "yoq"], "telegram_enabled": ["ha", "yoq"], "partial_interval_minutes": ["0", "15", "30", "60"], "language": ["uz", "ru"], "expires_at": ["12", "24", "72", "168"], "origin_radius": ["0", "10", "25", "50", "100"]}
+        choices = {"route_mode": ["alternatives", "ordered", "anywhere"], "kind": ["tent", "van", "refrigerator", "isothermal", "flatbed", "tanker", "dump", "lowbed", "container", "other"], "currency": ["UZS", "USD"], "price_basis": ["trip", "ton"], "match_mode": ["any_two", "route", "full"], "partial_load": ["ha", "yoq"], "partial_interval_minutes": ["0", "15", "30", "60"], "language": ["uz", "ru"], "expires_at": ["12", "24", "72", "168"], "origin_radius": ["0", "10", "25", "50", "100"]}
         if key == "vehicle":
             rows += [[button(str(v.pk), f"🚛 {v.name} · {v.capacity_tons} t")] for v in Vehicle.objects.filter(owner=account.owner)]
             rows.append([{"text": "➕ Добавить машину" if ru else "➕ Mashina qo‘shish", "callback_data": "nav:vehicle"}])
@@ -289,7 +287,7 @@ def prompt(account):
 
 def parse_answer(key, text, message, data, state=None):
     state = state if state is not None else {}
-    if key in ("route_mode", "price_basis", "match_mode", "kind", "partial_load", "telegram_enabled"):
+    if key in ("route_mode", "price_basis", "match_mode", "kind", "partial_load"):
         for value, labels in OPTION_LABELS.items():
             if text in labels:
                 text = value
@@ -372,7 +370,7 @@ def parse_answer(key, text, message, data, state=None):
         if not 1 <= hours <= 720:
             raise ValueError()
         data[key] = (timezone.now() + timedelta(hours=hours)).isoformat()
-    elif key in ("partial_load", "telegram_enabled"):
+    elif key in ("partial_load"):
         if text.casefold() not in ("ha", "yoq", "да", "нет"):
             raise ValueError()
         data[key] = text.casefold() in ("ha", "да")
@@ -435,24 +433,26 @@ def handle_update(update):
     sender = (query or message).get("from", {}).get("id")
     if sender != chat_id:
         return
+    reset_handled = False
+    if not query:
+        # Reset endpoints lock the challenge before the Telegram account, too.
+        from authentication.password_reset import handle_password_reset_message
+        reset_handled = handle_password_reset_message(message, call, delete_message)
+    TelegramAccount.objects.filter(chat_id=chat_id, blocked=True, owner__is_active=True).update(blocked=False)
+    if reset_handled:
+        return
     if not query:
         from authentication.telegram_verification import handle_registration_message
         if handle_registration_message(message, call, delete_message):
             return
     text = message.get("text", "").strip()[:4000]
     if not query and text.startswith("/start "):
-        account = bind_account(text.split(maxsplit=1)[1], chat_id)
-        if account:
-            delete_message(chat_id, message.get("message_id"))
-            say(account, "Akkaunt ulandi. Kerakli bo‘limni tugmalardan tanlang.", "Аккаунт подключён. Выберите раздел кнопками.")
-        else:
-            call("sendMessage", chat_id=chat_id, text="Havola yaroqsiz yoki muddati tugagan. Saytdan yangi ulash havolasini oling. / Ссылка недействительна. Получите новую на сайте.", reply_markup=public_keyboard())
-        return
+        text = "/start"
     account = TelegramAccount.objects.select_related("owner").filter(chat_id=chat_id, owner__is_active=True).first()
     if not account:
         if query:
             call("answerCallbackQuery", callback_query_id=query["id"])
-        call("sendMessage", chat_id=chat_id, text="Saytda driver bo‘lib kiring → Tiketlarim → Xabar sozlamalari → Telegramni ulash. / Войдите на сайт как водитель → Мои заявки → Настройки уведомлений → Подключить Telegram.", reply_markup=public_keyboard())
+        call("sendMessage", chat_id=chat_id, text="YukFlow saytida ro‘yxatdan o‘ting va telefoningizni shu bot orqali tasdiqlang. Akkaunt avtomatik ulanadi. / Зарегистрируйтесь на сайте YukFlow и подтвердите номер в этом боте. Аккаунт подключится автоматически.", reply_markup=public_keyboard())
         return
     if account.owner.role != "driver":
         if query and query.get("id"):

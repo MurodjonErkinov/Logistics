@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from .models import RegistrationVerification
+from .telegram_codes import send_copyable_code
 from .verification import CODE_LIFETIME, code_digest, normalize_phone
 
 logger = logging.getLogger(__name__)
@@ -76,9 +77,8 @@ def handle_registration_message(message, call, delete_message):
     code = f"{secrets.randbelow(1_000_000):06d}"
     row.code_digest = code_digest(row, code)
     row.expires_at = timezone.now() + CODE_LIFETIME
-    result = call("sendMessage", chat_id=chat_id,
-                  text=f"YukFlow tasdiqlash kodi: {code}\n\nKod 5 daqiqa amal qiladi. Uni YukFlow saytidagi registratsiyaga kiriting. Kodni hech kimga bermang.\n\nКод подтверждения: {code}. Действует 5 минут. Не сообщайте его другим.",
-                  reply_markup={"remove_keyboard": True}, protect_content=True)
+    result = send_copyable_code(call, delete_message, chat_id=chat_id, code=code, remove_keyboard=True,
+                               text=f"<b>YukFlow tasdiqlash kodi / Код подтверждения</b>\n\n<code>{code}</code>\n\n📋 Kodni yoki pastdagi tugmani bosib nusxalang. / Нажмите на код или кнопку ниже, чтобы скопировать.\n\nKod 5 daqiqa amal qiladi. Uni YukFlow saytidagi registratsiyaga kiriting. Kodni hech kimga bermang.\n\nДействует 5 минут. Введите код при регистрации на сайте YukFlow. Не сообщайте его другим.")
     previous = row.bot_message_id
     row.bot_message_id = result["message_id"]
     row.save(update_fields=["code_digest", "expires_at", "bot_message_id"])

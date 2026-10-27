@@ -1899,6 +1899,22 @@ td select {
   font-weight: 800;
   margin-left: 5px;
 }
+.auth-recovery {
+  justify-self: end;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 600;
+}
+.auth-form-wrap .auth-help {
+  margin-top: 24px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.auth-help a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .password-field {
   display: flex;
   border: 1px solid #dfe5dc;

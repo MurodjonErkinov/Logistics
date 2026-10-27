@@ -6,6 +6,7 @@ from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.utils import get_md5_hash_password
 
 from .verification import normalize_phone, register_verified_user
+from .password_reset import reset_password
 
 User = get_user_model()
 
@@ -46,6 +47,22 @@ class PhoneVerificationSerializer(serializers.Serializer):
 
     def validate_phone_number(self, value):
         return normalize_phone(value)
+
+
+class PasswordResetSerializer(PhoneVerificationSerializer):
+    verification_id = serializers.UUIDField(write_only=True)
+    verification_code = serializers.RegexField(r"^[0-9]{6}$", write_only=True, error_messages={"invalid": "Telegramdan olingan 6 xonali kodni kiriting."})
+    password = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
+    password_confirm = serializers.CharField(write_only=True, trim_whitespace=False, max_length=128)
+
+    def validate(self, attrs):
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError({"password_confirm": "Parollar bir xil bo‘lishi kerak."})
+        return attrs
+
+    def create(self, validated_data):
+        reset_password(validated_data)
+        return validated_data
 
 
 class RegistrationSerializer(UserSerializer):

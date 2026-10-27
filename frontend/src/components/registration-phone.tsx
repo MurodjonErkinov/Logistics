@@ -13,8 +13,15 @@ type Challenge = {
   retry_after: number;
 };
 
-export function RegistrationPhone({ disabled }: { disabled: boolean }) {
+export function RegistrationPhone({
+  disabled,
+  purpose = "registration",
+}: {
+  disabled: boolean;
+  purpose?: "registration" | "password-reset";
+}) {
   const { locale } = useLocale();
+  const reset = purpose === "password-reset";
   const c = (uz: string, ru: string) => (locale === "ru" ? ru : uz);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
@@ -48,10 +55,13 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
       );
     }
     try {
-      const result = await api<Challenge>("auth/registration-code/", {
-        method: "POST",
-        body: JSON.stringify({ phone_number: phone }),
-      });
+      const result = await api<Challenge>(
+        reset ? "auth/password-reset-code/" : "auth/registration-code/",
+        {
+          method: "POST",
+          body: JSON.stringify({ phone_number: phone }),
+        },
+      );
       setChallenge(result);
       setCode("");
       setRetryAt(Date.now() + result.retry_after * 1000);
@@ -68,10 +78,17 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
     <div className={styles.verification}>
       <Field
         label={c("Telefon raqam", "Номер телефона")}
-        hint={c(
-          "Telegram akkauntingizga ulangan raqamni kiriting.",
-          "Введите номер, привязанный к вашему Telegram.",
-        )}
+        hint={
+          reset
+            ? c(
+                "Ro‘yxatdan o‘tgan telefon raqamingizni kiriting.",
+                "Введите номер телефона, указанный при регистрации.",
+              )
+            : c(
+                "Telegram akkauntingizga ulangan raqamni kiriting.",
+                "Введите номер, привязанный к вашему Telegram.",
+              )
+        }
       >
         <input
           name="phone_number"
@@ -118,10 +135,15 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
       {challenge && (
         <div className={styles.steps}>
           <p>
-            {c(
-              "Telegramda Start → raqamni ulash. Kelgan kodni shu yerga kiriting.",
-              "В Telegram: Start → отправить номер. Введите полученный код здесь.",
-            )}
+            {reset
+              ? c(
+                  "Raqamga Telegram ulangan bo‘lsa, botda Start bosganingizda kod beriladi. Kodni shu yerga kiriting.",
+                  "Если к номеру привязан Telegram, нажмите Start в боте и введите полученный код здесь.",
+                )
+              : c(
+                  "Telegramda Start → raqamni ulash. Kelgan kodni shu yerga kiriting.",
+                  "В Telegram: Start → отправить номер. Введите полученный код здесь.",
+                )}
           </p>
           <Field
             label={c("Tasdiqlash kodi", "Код подтверждения")}
@@ -168,10 +190,15 @@ export function RegistrationPhone({ disabled }: { disabled: boolean }) {
       {!challenge && (
         <p className={styles.hint}>
           <ShieldCheck size={16} />
-          {c(
-            "Ro‘yxatdan o‘tish uchun telefoningizni Telegram orqali tasdiqlang.",
-            "Для регистрации подтвердите телефон через Telegram.",
-          )}
+          {reset
+            ? c(
+                "Kod faqat akkauntingizga avval ulangan Telegram orqali beriladi.",
+                "Код доступен только в Telegram, ранее привязанном к вашему аккаунту.",
+              )
+            : c(
+                "Ro‘yxatdan o‘tish uchun telefoningizni Telegram orqali tasdiqlang.",
+                "Для регистрации подтвердите телефон через Telegram.",
+              )}
         </p>
       )}
     </div>

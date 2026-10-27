@@ -210,3 +210,86 @@ test("notification explains all checks, read and dismiss update bell", async ({
     "Bildirishnomalar: 0",
   );
 });
+
+test("notification settings use the registration chat without a linking step", async ({
+  page,
+}) => {
+  const user = {
+    id: 123,
+    username: "verified_driver",
+    first_name: "Sardor",
+    role: "driver",
+    is_staff: false,
+  };
+  let pref = {
+    telegram_enabled: true,
+    partial_interval_minutes: 30,
+    quiet_start: null,
+    quiet_end: null,
+    timezone: "Asia/Tashkent",
+    language: "uz",
+    telegram_connected: true,
+    telegram_blocked: false,
+    bot_configured: true,
+  };
+  let manualLinkRequests = 0;
+  await page.route("**/api/auth/me/", (route) => route.fulfill({ json: user }));
+  await page.route("**/api/driver/**", (route) => {
+    const url = route.request().url();
+    if (url.includes("telegram-link")) {
+      manualLinkRequests++;
+      return route.fulfill({ status: 404, json: {} });
+    }
+    if (url.includes("preferences")) {
+      if (route.request().method() === "PATCH")
+        pref = { ...pref, ...route.request().postDataJSON() };
+      return route.fulfill({ json: pref });
+    }
+    return route.fulfill({ json: url.includes("unread") ? { count: 0 } : [] });
+  });
+  await page.goto("/driver/tickets");
+  await page
+    .getByRole("button", { name: "Xabar sozlamalari", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", {
+      name: "Bildirishnoma sozlamalari",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Mos yuklar haqidagi xabarlar registratsiyada tasdiqlangan Telegram akkauntingizga avtomatik yuboriladi.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Telegramni ulash", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Uzish", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Telegramga ham yuborish", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Qisman mos yuklarni jamlash").selectOption("15");
+  await page.getByRole("button", { name: "Saqlash", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Saqlandi");
+  expect(pref.telegram_enabled).toBe(true);
+  expect(pref.partial_interval_minutes).toBe(15);
+  expect(manualLinkRequests).toBe(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/automatic-notifications-mobile.png",
+    animations: "disabled",
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByLabel("Til / Язык").selectOption("ru");
+  await expect(
+    page.getByRole("heading", { name: "Настройки уведомлений", exact: true }),
+  ).toBeVisible();
+});

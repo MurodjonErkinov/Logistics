@@ -54,3 +54,17 @@ class RegistrationPhoneThrottle(SimpleRateThrottle):
         data = request.data if isinstance(request.data, dict) else {}
         phone = re.sub(r"[^0-9]", "", str(data.get("phone_number", ""))[:32])
         return self.cache_format % {"scope": self.scope, "ident": sha256(phone.encode()).hexdigest()}
+
+
+class PasswordResetCodeAddressThrottle(AuthAddressThrottle):
+    scope = "password_reset_code_address"
+    rate = "20/hour"
+
+
+class PasswordResetPhoneThrottle(RegistrationPhoneThrottle):
+    scope = "password_reset_phone"
+
+
+class PasswordResetAddressThrottle(AuthAddressThrottle):
+    scope = "password_reset_address"
+    rate = "30/min"

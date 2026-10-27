@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import UserManager
 from django.core.validators import RegexValidator
@@ -36,6 +37,22 @@ class RegistrationVerification(models.Model):
     requested_at = models.DateTimeField()
     expires_at = models.DateTimeField()
     chat_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    code_digest = models.CharField(max_length=64, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    bot_message_id = models.BigIntegerField(null=True, blank=True)
+
+
+class PasswordResetVerification(models.Model):
+    """A reset is bound to the existing account, Telegram chat and password."""
+
+    phone_number = models.CharField(max_length=16, unique=True)
+    verification_id = models.UUIDField(default=uuid.uuid4, unique=True)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    chat_id = models.BigIntegerField(null=True, blank=True)
+    password_fingerprint = models.CharField(max_length=64, blank=True)
+    requested_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
     code_digest = models.CharField(max_length=64, blank=True)
     attempts = models.PositiveSmallIntegerField(default=0)
     consumed_at = models.DateTimeField(null=True, blank=True)

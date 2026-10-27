@@ -9,10 +9,17 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .throttles import AuthAddressThrottle, LoginAccountThrottle, RegistrationThrottle, RefreshThrottle, RegistrationCodeAddressThrottle, RegistrationPhoneThrottle
-
-from .serializers import ProfileSerializer, RegistrationSerializer, UserSerializer, SecureTokenRefreshSerializer, PhoneVerificationSerializer
+from .throttles import (
+    AuthAddressThrottle, LoginAccountThrottle, RegistrationThrottle, RefreshThrottle,
+    RegistrationCodeAddressThrottle, RegistrationPhoneThrottle, PasswordResetAddressThrottle,
+    PasswordResetCodeAddressThrottle, PasswordResetPhoneThrottle,
+)
+from .serializers import (
+    ProfileSerializer, RegistrationSerializer, UserSerializer, SecureTokenRefreshSerializer,
+    PhoneVerificationSerializer, PasswordResetSerializer,
+)
 from .verification import new_verification
+from .password_reset import new_password_reset
 
 
 class LoginView(TokenObtainPairView):
@@ -44,6 +51,33 @@ class RegistrationCodeView(APIView):
         serializer.is_valid(raise_exception=True)
         row = new_verification(serializer.validated_data["phone_number"])
         return Response({"verification_id": str(row.verification_id), "bot_url": f"https://t.me/{username}?start=reg_{row.verification_id.hex}", "retry_after": 60}, status=201)
+
+
+class PasswordResetCodeView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_classes = [PasswordResetCodeAddressThrottle, PasswordResetPhoneThrottle]
+
+    def post(self, request):
+        username = os.getenv("DRIVER_BOT_USERNAME", "").lstrip("@")
+        if not os.getenv("DRIVER_BOT_TOKEN") or not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+            return Response({"detail": "Telegram tasdiqlash boti sozlanmagan. Birozdan keyin qayta urinib ko‘ring."}, status=503)
+        serializer = PhoneVerificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        row = new_password_reset(serializer.validated_data["phone_number"])
+        return Response({"verification_id": str(row.verification_id), "bot_url": f"https://t.me/{username}?start=reset_{row.verification_id.hex}", "retry_after": 60}, status=201)
+
+
+class PasswordResetView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_classes = [PasswordResetAddressThrottle]
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "Parolingiz yangilandi. Yangi parol bilan akkauntingizga kiring."})
 
 
 class ProfileView(generics.RetrieveUpdateAPIView):

@@ -74,7 +74,7 @@ def register_verified_user(data):
                 else:
                     user = User.objects.create_user(**data)
                     TelegramAccount.objects.create(owner=user, chat_id=row.chat_id, ui={"message_id": row.bot_message_id, "actions": {}})
-                    Preference.objects.create(owner=user)
+                    Preference.objects.create(owner=user, telegram_enabled=True)
                     row.consumed_at = timezone.now()
                     row.code_digest = ""
                     row.save(update_fields=["consumed_at", "code_digest"])

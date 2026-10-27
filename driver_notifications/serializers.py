@@ -92,6 +92,7 @@ class PreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Preference
         fields = ["telegram_enabled", "partial_interval_minutes", "quiet_start", "quiet_end", "timezone", "language"]
+        read_only_fields = ["telegram_enabled"]
 
     def validate(self, attrs):
         if attrs.get("partial_interval_minutes", self.instance.partial_interval_minutes) not in (0, 15, 30, 60):

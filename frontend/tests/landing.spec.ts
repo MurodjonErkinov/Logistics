@@ -12,14 +12,12 @@ const user = {
 };
 
 async function mockSession(page: Page) {
-  await page
-    .context()
-    .route("https://t.me/YukFlowTestBot**", (route) =>
-      route.fulfill({
-        contentType: "text/html",
-        body: "<title>Telegram test</title>",
-      }),
-    );
+  await page.context().route("https://t.me/YukFlowTestBot**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<title>Telegram test</title>",
+    }),
+  );
   let signedIn = false;
   let account = { ...user };
   await page.route("**/api/auth/me/", (route) =>
@@ -80,6 +78,38 @@ test("guest homepage: sections, role tabs, FAQ, registration and responsive layo
     )
     .toBeGreaterThan(0);
   await page.screenshot({ path: "test-results/landing-hero.png" });
+  const services = page.locator("#services");
+  const contact = page.locator("#contact");
+  await page
+    .getByRole("banner")
+    .getByRole("link", { name: "Xizmatlar", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#services$/);
+  await expect(services.getByRole("article")).toHaveCount(4);
+  await expect(
+    services.getByRole("link", { name: "Yuk yuborish", exact: true }),
+  ).toHaveAttribute("href", "#send-load");
+  await expect(
+    services.getByRole("link", { name: "Yuk qidirishni boshlash" }),
+  ).toHaveAttribute("href", /role=driver$/);
+  await services.screenshot({
+    path: "test-results/landing-services-desktop.png",
+  });
+  await page
+    .getByRole("banner")
+    .getByRole("link", { name: "Bog‘lanish", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#contact$/);
+  await expect(
+    contact.getByRole("link", { name: /Qo‘ng‘iroq qiling/ }),
+  ).toHaveAttribute("href", "tel:+998938548483");
+  await expect(
+    contact.getByRole("link", { name: /Telegram orqali yozing/ }),
+  ).toHaveAttribute("href", "https://t.me/murodjonerkinov");
+  await contact.screenshot({
+    path: "test-results/landing-contact-desktop.png",
+  });
+
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: "test-results/landing-desktop.png",
@@ -101,7 +131,7 @@ test("guest homepage: sections, role tabs, FAQ, registration and responsive layo
     .click();
   await expect(page.locator("details[open]")).toContainText([
     "YukFlow",
-    "Telegramni ulasangiz",
+    "registratsiyada tasdiqlangan Telegram",
   ]);
   await page
     .getByRole("link", { name: "Men haydovchiman", exact: true })
@@ -109,7 +139,7 @@ test("guest homepage: sections, role tabs, FAQ, registration and responsive layo
   await expect(page).toHaveURL(/\/register\?role=driver$/);
   await expect(page.locator('select[name="role"]')).toHaveValue("driver");
   await page.goto("/");
-  for (const width of [320, 390, 768]) {
+  for (const width of [320, 390, 768, 1024, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await expect
       .poll(() =>
@@ -135,6 +165,21 @@ test("guest homepage: sections, role tabs, FAQ, registration and responsive layo
     .click();
   await page
     .getByRole("navigation", { name: "Mobil menyu", exact: true })
+    .getByRole("link", { name: "Bog‘lanish", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#contact$/);
+  await expect(
+    page.getByRole("button", { name: "Menyuni ochish", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await contact.screenshot({ path: "test-results/landing-contact-mobile.png" });
+  await services.screenshot({
+    path: "test-results/landing-services-mobile.png",
+  });
+  await page
+    .getByRole("button", { name: "Menyuni ochish", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Mobil menyu", exact: true })
     .getByRole("link", { name: "Qanday ishlaydi?", exact: true })
     .click();
   await expect(
@@ -147,6 +192,13 @@ test("guest homepage: sections, role tabs, FAQ, registration and responsive layo
   await expect(
     page.getByRole("tab", { name: "Я водитель", exact: true }),
   ).toBeVisible();
+  await expect(services.getByRole("heading", { level: 2 })).toContainText(
+    "Для каждого груза",
+  );
+  await expect(
+    contact.getByRole("link", { name: /Позвоните нам/ }),
+  ).toHaveAttribute("href", "tel:+998938548483");
+
   await page.screenshot({
     path: "test-results/landing-mobile-ru.png",
     fullPage: true,

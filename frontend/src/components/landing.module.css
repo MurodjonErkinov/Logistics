@@ -223,40 +223,6 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-.platformStrip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding-block: 27px;
-  border-top: 1px solid #e1e5d9;
-  border-bottom: 1px solid #e1e5d9;
-}
-.platformStrip > div {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  justify-content: center;
-  padding: 5px 15px;
-  border-right: 1px solid #e1e5d9;
-}
-.platformStrip > div:first-child {
-  justify-content: flex-start;
-}
-.platformStrip > div:last-child {
-  border: 0;
-}
-.platformStrip svg {
-  color: #79916a;
-  flex-shrink: 0;
-}
-.platformStrip strong {
-  font-size: 13px;
-  font-weight: 700;
-}
-.platformStrip p {
-  font-size: 11px;
-  color: #8a9280;
-  margin-top: 3px;
-}
 .section {
   padding-block: 100px;
 }
@@ -807,17 +773,6 @@
   .heroCopy > p {
     max-width: 540px;
   }
-  .platformStrip {
-    gap: 15px;
-  }
-  .platformStrip > div {
-    flex-direction: column;
-    text-align: center;
-    gap: 10px;
-  }
-  .platformStrip > div:first-child {
-    justify-content: center;
-  }
   .section {
     padding-block: 70px;
   }
@@ -952,27 +907,6 @@
   .heroNote {
     font-size: 10px;
     margin-top: 18px;
-  }
-  .platformStrip {
-    gap: 0;
-    padding-block: 22px;
-  }
-  .platformStrip > div {
-    padding: 2px 9px;
-    gap: 8px;
-  }
-  .platformStrip strong {
-    font-size: 10px;
-    display: block;
-    line-height: 1.6;
-  }
-  .platformStrip p {
-    font-size: 9px;
-    line-height: 1.6;
-    margin-top: 4px;
-  }
-  .platformStrip svg {
-    width: 21px;
   }
   .section {
     padding-block: 55px;
@@ -1311,25 +1245,6 @@
   color: white;
   font-size: 11px;
   letter-spacing: 0;
-}
-.platformStrip {
-  border-top: 0;
-  border-bottom: 1px solid #e8eae7;
-  padding-block: 34px;
-}
-.platformStrip > div {
-  gap: 18px;
-  border-color: #e8eae7;
-}
-.platformStrip svg {
-  color: #dd7847;
-}
-.platformStrip strong {
-  font-size: 14px;
-}
-.platformStrip p {
-  font-size: 12px;
-  color: #87908c;
 }
 .sectionHeading > p {
   max-width: 365px;
@@ -1709,18 +1624,6 @@
   .heroBottom svg {
     width: 13px;
   }
-  .platformStrip {
-    padding-block: 26px;
-  }
-  .platformStrip strong {
-    font-size: 11px;
-  }
-  .platformStrip p {
-    font-size: 10px;
-  }
-  .platformStrip > div {
-    padding-inline: 8px;
-  }
   .landing h2 {
     font-size: 34px;
   }
@@ -1809,5 +1712,33 @@
   }
   .footerBottom {
     font-size: 10px;
+  }
+}
+
+/* Keep all public navigation links readable before switching to the mobile menu. */
+.desktopNav {
+  gap: 22px;
+  font-size: 13px;
+}
+@media (min-width: 821px) and (max-width: 1180px) {
+  .desktopNav {
+    display: none;
+  }
+  .menuToggle {
+    display: grid;
+  }
+  .mobileNav {
+    display: grid;
+    gap: 0;
+    padding: 0 32px 20px;
+    border-bottom: 1px solid #eceee9;
+  }
+  .mobileNav a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 8px;
+    font-size: 14px;
+    border-top: 1px solid #eceee9;
   }
 }

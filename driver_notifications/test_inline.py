@@ -112,8 +112,15 @@ class InlineBotTests(TestCase):
         self.tap(self.payload(call, ":ru"))
         self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
         buttons = [b["text"] for row in self.sent(call).kwargs["reply_markup"]["keyboard"] for b in row]
-        self.assertIn("Да", buttons)
+        self.assertIn("30", buttons)
         self.assertIn("🏠 Меню", buttons)
+
+    def test_start_restores_delivery_without_reconnecting(self, call):
+        self.account.blocked = True
+        self.account.save(update_fields=["blocked"])
+        self.message("/start")
+        self.assertFalse(self.account.blocked)
+        self.assertEqual(self.account.chat_id, 123)
 
     def test_old_bot_and_user_messages_are_deleted(self, call):
         self.account.ui = {"message_id": 99}

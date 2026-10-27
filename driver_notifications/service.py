@@ -1,5 +1,3 @@
-import hashlib
-import secrets
 from datetime import timedelta
 
 from django.db import transaction
@@ -8,24 +6,7 @@ from django.utils import timezone
 
 from cargo.models import Load
 from .matching import evaluate
-from .models import LinkToken, MatchState, Notification, Preference, TelegramAccount, Ticket
-
-
-def new_link(user):
-    token = secrets.token_urlsafe(24)
-    LinkToken.objects.filter(owner=user).delete()
-    LinkToken.objects.create(owner=user, digest=hashlib.sha256(token.encode()).hexdigest(), expires_at=timezone.now() + timedelta(minutes=10))
-    return token
-
-
-@transaction.atomic
-def bind_account(token, chat_id):
-    row = LinkToken.objects.select_for_update().filter(digest=hashlib.sha256(token.encode()).hexdigest(), expires_at__gt=timezone.now(), owner__role="driver", owner__is_active=True).first()
-    if not row or TelegramAccount.objects.filter(chat_id=chat_id).exclude(owner=row.owner).exists():
-        return None
-    account, _ = TelegramAccount.objects.update_or_create(owner=row.owner, defaults={"chat_id": chat_id, "blocked": False, "state": {}})
-    row.delete()
-    return account
+from .models import MatchState, Notification, Preference, TelegramAccount, Ticket
 
 
 def snapshot(load):
@@ -96,4 +77,3 @@ def scan_ticket(ticket_id):
 def scan_all():
     for pk in Ticket.objects.exclude(status="closed").values_list("pk", flat=True).iterator():
         scan_ticket(pk)
-    LinkToken.objects.filter(expires_at__lte=timezone.now()).delete()

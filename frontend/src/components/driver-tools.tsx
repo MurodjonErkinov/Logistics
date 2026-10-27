@@ -5,7 +5,6 @@ import {
   Bell,
   MapPin,
   Plus,
-  Send,
   Ticket as TicketIcon,
   Truck,
   X,
@@ -197,7 +196,6 @@ function Tools() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Ticket | null | undefined>(undefined);
   const [vehicleEdit, setVehicleEdit] = useState<Vehicle | null>(null);
-  const [link, setLink] = useState("");
   async function refresh() {
     try {
       const [ts, vs, ps] = await Promise.all([
@@ -542,18 +540,25 @@ function Tools() {
         pref && (
           <section className="ticket-form">
             <h2>
-              <Send size={22} /> {t("Telegram va bildirishnomalar")}
+              <Bell size={22} /> {t("Bildirishnoma sozlamalari")}
             </h2>
             <p>
               {t(
-                pref.telegram_connected
-                  ? "Telegram ulangan"
-                  : "Telegram hali ulanmagan",
+                "Mos yuklar haqidagi xabarlar registratsiyada tasdiqlangan Telegram akkauntingizga avtomatik yuboriladi.",
               )}
             </p>
+            {!pref.telegram_connected && (
+              <ErrorBox
+                message={t(
+                  "Bu akkauntda tasdiqlangan Telegram topilmadi. Yordam uchun administratorga murojaat qiling.",
+                )}
+              />
+            )}
             {pref.telegram_blocked && (
               <ErrorBox
-                message={t("Bot bloklangan. Telegramda ochib, qayta ulang.")}
+                message={t(
+                  "Bot bloklangan. Telegramda blokdan chiqaring va Start bosing — xabarlar yana keladi.",
+                )}
               />
             )}
             {!pref.bot_configured && (
@@ -563,52 +568,6 @@ function Tools() {
                 )}
               </p>
             )}
-            <div className="ticket-actions">
-              <button
-                disabled={busy || !pref.bot_configured}
-                className="button primary"
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    const r = await api<{ url: string }>(
-                      "driver/telegram-link/",
-                      { method: "POST", body: "{}" },
-                    );
-                    setLink(r.url);
-                  } catch (e) {
-                    setError(errorMessage(e));
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                {t("Telegramni ulash")}
-              </button>
-              {pref.telegram_connected && (
-                <button
-                  className="button secondary"
-                  onClick={() => void action("driver/telegram-link/", "DELETE")}
-                >
-                  {t("Uzish")}
-                </button>
-              )}
-              <button
-                className="button secondary"
-                onClick={() => void refresh()}
-              >
-                {t("Yangilash")}
-              </button>
-            </div>
-            {link && (
-              <a
-                className="button secondary"
-                href={link}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {t("Botni ochish — havola 10 daqiqa amal qiladi")}
-              </a>
-            )}
             <form
               className="form-stack"
               onSubmit={(e) => {
@@ -616,16 +575,6 @@ function Tools() {
                 void action("driver/preferences/", "PATCH", pref);
               }}
             >
-              <label className="ticket-checkbox">
-                <input
-                  type="checkbox"
-                  checked={pref.telegram_enabled}
-                  onChange={(e) =>
-                    setPref({ ...pref, telegram_enabled: e.target.checked })
-                  }
-                />
-                {t("Telegramga ham yuborish")}
-              </label>
               <Field label={t("Qisman mos yuklarni jamlash")}>
                 <select
                   value={pref.partial_interval_minutes}

@@ -22,6 +22,7 @@ import {
 import { LanguageSwitcher, useLocale } from "./locale";
 import styles from "./landing.module.css";
 import { QuickShipment } from "./quick-shipment";
+import { LandingServices, LandingContact } from "./landing-public-sections";
 
 export function Landing() {
   const { locale } = useLocale();
@@ -67,8 +68,8 @@ export function Landing() {
         "Как получать уведомления о подходящих грузах?",
       ),
       c(
-        "Haydovchi kabinetida mashinangizni qo‘shing va yo‘nalish, sig‘im, vaqt hamda narx shartlari bilan tiket oching. Mosliklar saytning bildirishnomalar bo‘limida chiqadi. Telegramni ulasangiz, sozlamalaringizga ko‘ra botga ham yuboriladi.",
-        "Добавьте машину и создайте заявку с маршрутом, грузоподъёмностью, временем и ценой. Совпадения появятся в уведомлениях на сайте. Подключите Telegram, чтобы получать их и в боте с учётом ваших настроек.",
+        "Haydovchi kabinetida mashinangizni qo‘shing va yo‘nalish, sig‘im, vaqt hamda narx shartlari bilan tiket oching. Mosliklar saytning bildirishnomalar bo‘limida chiqadi. Xabarlar registratsiyada tasdiqlangan Telegram akkauntingizga ham avtomatik yuboriladi.",
+        "Добавьте машину и создайте заявку с маршрутом, грузоподъёмностью, временем и ценой. Совпадения появятся в уведомлениях на сайте. Уведомления также автоматически отправляются в Telegram, подтверждённый при регистрации.",
       ),
     ],
     [
@@ -81,6 +82,9 @@ export function Landing() {
   ];
   const nav = (
     <>
+      <a href="#services" onClick={() => setMenu(false)}>
+        {c("Xizmatlar", "Услуги")}
+      </a>
       <a href="#possibilities" onClick={() => setMenu(false)}>
         {c("Imkoniyatlar", "Возможности")}
       </a>
@@ -89,6 +93,9 @@ export function Landing() {
       </a>
       <a href="#questions" onClick={() => setMenu(false)}>
         {c("Savol-javob", "Вопросы и ответы")}
+      </a>
+      <a href="#contact" onClick={() => setMenu(false)}>
+        {c("Bog‘lanish", "Контакты")}
       </a>
     </>
   );
@@ -201,39 +208,7 @@ export function Landing() {
           </div>
         </section>
         <QuickShipment />
-        <div className={`${styles.platformStrip} ${styles.container}`}>
-          {[
-            [
-              Truck,
-              c("Haydovchilar uchun", "Для водителей"),
-              c("Yo‘nalishingizga mos yuklar", "Грузы по вашему маршруту"),
-            ],
-            [
-              Package,
-              c("Yuk joylovchilar uchun", "Для отправителей"),
-              c(
-                "E’londan bevosita aloqagacha",
-                "От объявления до прямого контакта",
-              ),
-            ],
-            [
-              Send,
-              c("Telegram bilan birga", "Вместе с Telegram"),
-              c("Kerakli xabar, qulay joyda", "Нужные уведомления под рукой"),
-            ],
-          ].map(([Icon, title, text]) => {
-            const I = Icon as typeof Truck;
-            return (
-              <div key={String(title)}>
-                <I size={24} strokeWidth={1.5} />
-                <div>
-                  <strong>{String(title)}</strong>
-                  <p>{String(text)}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <LandingServices />
         <section
           id="possibilities"
           className={`${styles.section} ${styles.container}`}
@@ -357,8 +332,8 @@ export function Landing() {
                         "Узнавайте о подходящих грузах",
                       ),
                       c(
-                        "Saytda bildirishnoma oling, xohlasangiz Telegram akkauntingizni ham ulang.",
-                        "Получайте уведомления на сайте и подключите Telegram при желании.",
+                        "Saytda va registratsiyada tasdiqlangan Telegram akkauntingizda avtomatik xabar oling.",
+                        "Автоматически получайте уведомления на сайте и в Telegram, подтверждённом при регистрации.",
                       ),
                     ],
                   ]
@@ -590,6 +565,9 @@ export function Landing() {
             ))}
           </div>
         </section>
+        <LandingContact
+          details={{ phone: "+998 93 854 84 83", telegram: "murodjonerkinov" }}
+        />
         <section
           id="get-started"
           className={`${styles.finalCta} ${styles.container}`}

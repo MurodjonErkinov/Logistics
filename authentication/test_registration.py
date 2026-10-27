@@ -129,6 +129,13 @@ class RegistrationVerificationTests(TestCase):
 
     def test_code_hash_only_and_duplicate_contact_does_not_rotate(self, call):
         row = self.issue()
+        sent = [c for c in call.call_args_list if c.args[0] == "sendMessage"][-1]
+        self.assertEqual(sent.kwargs["parse_mode"], "HTML")
+        self.assertIn("<code>123456</code>", sent.kwargs["text"])
+        self.assertFalse(sent.kwargs.get("protect_content", False))
+        self.assertEqual(sent.kwargs["reply_markup"]["inline_keyboard"][0][0]["copy_text"], {"text": "123456"})
+        clearing = next(c for c in call.call_args_list if c.args[0] == "sendMessage" and c.kwargs.get("reply_markup") == {"remove_keyboard": True})
+        self.assertTrue(clearing.kwargs["disable_notification"])
         row.refresh_from_db()
         self.assertNotIn("123456", row.code_digest)
         digest = row.code_digest
@@ -213,6 +220,41 @@ class RegistrationVerificationTests(TestCase):
     def test_conflict_error_explains_duplicate_polling_without_echoing_api_data(self, call):
         self.assertIn("another bot instance", str(BotError(409)))
         self.assertIn("webhook is active", str(BotError(409, description="Conflict: webhook is active")))
+
+    def test_registered_chat_receives_matches_without_manual_telegram_link(self, call):
+        from cargo.models import Load
+        from driver_notifications.delivery import deliver
+        from driver_notifications.models import Notification
+        self.issue()
+        self.assertEqual(self.register().status_code, 201)
+        user = get_user_model().objects.get(username="new_person")
+        self.client.force_authenticate(user)
+        result = self.client.patch("/api/driver/preferences/", {"telegram_enabled": False, "partial_interval_minutes": 0}, format="json")
+        self.assertEqual(result.status_code, 200, result.data)
+        self.assertTrue(result.data["telegram_enabled"])
+        self.assertEqual(self.client.post("/api/driver/telegram-link/", {}, format="json").status_code, 404)
+        self.assertEqual(self.client.delete("/api/driver/telegram-link/").status_code, 404)
+        self.assertEqual(TelegramAccount.objects.get(owner=user).chat_id, 123)
+        vehicle = self.client.post("/api/driver/vehicles/", {"name": "Tent", "kind": "tent", "capacity_tons": "20"}, format="json")
+        self.assertEqual(vehicle.status_code, 201, vehicle.data)
+        sender = get_user_model().objects.create_user(username="sender", role="dispatcher")
+        load = Load.objects.create(posted_by=sender, origin="Toshkent", destination="Samarqand", cargo_name="Sement", vehicle_type="Tent", vehicle_kind="tent", weight_tons="10", contact_phone="+998999999999")
+        now = timezone.now()
+        ticket = self.client.post("/api/driver/tickets/", {"title": "Yangi tiket", "vehicle": vehicle.data["id"], "origins": [{"name": "Toshkent"}], "destinations": [{"name": "Samarqand"}], "ready_at": now.isoformat(), "expires_at": (now + timedelta(days=7)).isoformat(), "available_tons": "20"}, format="json")
+        self.assertEqual(ticket.status_code, 201, ticket.data)
+        self.assertGreaterEqual(self.client.get("/api/driver/notifications/unread/").data["count"], 2)
+        with patch("driver_notifications.delivery.call", return_value={"message_id": 99}) as delivery:
+            deliver()
+            deliver()
+            sent = [c for c in delivery.call_args_list if c.args[0] == "sendMessage"]
+            self.assertEqual(len(sent), 2)
+            self.assertTrue(all(c.kwargs["chat_id"] == 123 for c in sent))
+            deliver()
+            self.assertEqual(len(delivery.call_args_list), 2)
+        self.assertIsNotNone(Notification.objects.get(owner=user, load=load, kind="match").sent_at)
+        TelegramAccount.objects.filter(owner=user).update(blocked=True)
+        self.message(text=f"/start reg_{self.account['verification_id'].replace('-', '')}")
+        self.assertFalse(TelegramAccount.objects.get(owner=user).blocked)
 
 
 @skipUnlessDBFeature("has_select_for_update")

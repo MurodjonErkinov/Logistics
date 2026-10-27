@@ -18,7 +18,13 @@ import { useSession } from "./session";
 import { ErrorBox, Field } from "./ui";
 import { RegistrationPhone } from "./registration-phone";
 
-export function AuthForm({ register = false }: { register?: boolean }) {
+export function AuthForm({
+  register = false,
+  reset = false,
+}: {
+  register?: boolean;
+  reset?: boolean;
+}) {
   const { t } = useLocale();
 
   const router = useRouter();
@@ -26,6 +32,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [show, setShow] = useState(false);
+  const [done, setDone] = useState(false);
   const [continuation, setContinuation] = useState("");
   const [role, setRole] = useState("dispatcher");
   useEffect(() => {
@@ -44,10 +51,25 @@ export function AuthForm({ register = false }: { register?: boolean }) {
     setBusy(true);
     const data = Object.fromEntries(new FormData(event.currentTarget));
     try {
-      if (register && !data.verification_id)
+      if ((register || reset) && !data.verification_id)
         throw new Error(
-          t("Avval telefon raqamingizni Telegram orqali tasdiqlang."),
+          t(
+            reset
+              ? "Avval Telegramdan parolni tiklash kodini oling."
+              : "Avval telefon raqamingizni Telegram orqali tasdiqlang.",
+          ),
         );
+      if (reset) {
+        if (data.password !== data.password_confirm)
+          throw new Error(t("Parollar bir xil bo‘lishi kerak."));
+        await api("auth/reset-password/", {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+        await reload();
+        setDone(true);
+        return;
+      }
       if (register)
         await api("auth/register/", {
           method: "POST",
@@ -130,108 +152,201 @@ export function AuthForm({ register = false }: { register?: boolean }) {
         </Link>
         <div className="auth-form-wrap">
           <span className="eyebrow">
-            {register
-              ? t("BIRINCHI QADAM")
-              : t("YANA KO‘RISHGANIMIZDAN XURSANDMIZ")}
+            {reset
+              ? t("AKKAUNTINGIZGA QAYTING")
+              : register
+                ? t("BIRINCHI QADAM")
+                : t("YANA KO‘RISHGANIMIZDAN XURSANDMIZ")}
           </span>
-          <h2>{register ? t("Akkaunt yarating") : t("Xush kelibsiz")}</h2>
+          <h2>
+            {reset
+              ? t(done ? "Parolingiz yangilandi" : "Parolni tiklash")
+              : register
+                ? t("Akkaunt yarating")
+                : t("Xush kelibsiz")}
+          </h2>
           <p>
-            {register
-              ? t("Yuk joylang, kerakli yo‘nalishlarni toping.")
-              : t("Ishingizni davom ettirish uchun akkauntingizga kiring.")}
+            {reset
+              ? t(
+                  done
+                    ? "Endi yangi parol bilan akkauntingizga kirishingiz mumkin."
+                    : "Telegramdan kod oling va akkauntingiz uchun yangi parol qo‘ying.",
+                )
+              : register
+                ? t("Yuk joylang, kerakli yo‘nalishlarni toping.")
+                : t("Ishingizni davom ettirish uchun akkauntingizga kiring.")}
           </p>
           <ErrorBox message={error} />
-          <form onSubmit={submit} className="form-stack">
-            {register && (
-              <Field label={t("Rol")}>
-                <select
-                  name="role"
-                  required
-                  value={role}
-                  onChange={(event) => setRole(event.target.value)}
-                >
-                  <option value="dispatcher">
-                    {t("Dispetcher")} — {t("Yuk joylash")}
-                  </option>
-                  <option value="driver">{t("Haydovchi")}</option>
-                </select>
-              </Field>
-            )}
-            {register && (
-              <div className="form-row">
-                <Field label={t("Ism")}>
+          {done ? (
+            <>
+              <div className="success-box" role="status">
+                <Check size={20} />
+                <span>
+                  {t("Parol almashtirildi. Avvalgi sessiyalar yakunlandi.")}
+                </span>
+              </div>
+              <Link
+                href={`/login${continuation}`}
+                className="button primary full-width"
+              >
+                {t("Kirish")}
+                <ArrowRight size={18} />
+              </Link>
+            </>
+          ) : (
+            <form onSubmit={submit} className="form-stack">
+              {register && (
+                <Field label={t("Rol")}>
+                  <select
+                    name="role"
+                    required
+                    value={role}
+                    onChange={(event) => setRole(event.target.value)}
+                  >
+                    <option value="dispatcher">
+                      {t("Dispetcher")} — {t("Yuk joylash")}
+                    </option>
+                    <option value="driver">{t("Haydovchi")}</option>
+                  </select>
+                </Field>
+              )}
+              {register && (
+                <div className="form-row">
+                  <Field label={t("Ism")}>
+                    <input
+                      name="first_name"
+                      autoComplete="given-name"
+                      required
+                      maxLength={150}
+                    />
+                  </Field>
+                  <Field label={t("Familiya")}>
+                    <input
+                      name="last_name"
+                      autoComplete="family-name"
+                      maxLength={150}
+                    />
+                  </Field>
+                </div>
+              )}
+              {!reset && (
+                <Field label={t("Foydalanuvchi nomi")}>
                   <input
-                    name="first_name"
-                    autoComplete="given-name"
+                    name="username"
+                    autoComplete="username"
                     required
                     maxLength={150}
+                    placeholder={t("Foydalanuvchi nomingiz")}
                   />
                 </Field>
-                <Field label={t("Familiya")}>
-                  <input
-                    name="last_name"
-                    autoComplete="family-name"
-                    maxLength={150}
-                  />
-                </Field>
-              </div>
-            )}
-            <Field label={t("Foydalanuvchi nomi")}>
-              <input
-                name="username"
-                autoComplete="username"
-                required
-                maxLength={150}
-                placeholder={t("Foydalanuvchi nomingiz")}
-              />
-            </Field>
-            {register && <RegistrationPhone disabled={busy} />}
-            <Field
-              label={t("Parol")}
-              hint={
-                register
-                  ? t("Kamida 8 belgi. Faqat raqamlardan iborat bo‘lmasin.")
-                  : undefined
-              }
-            >
-              <div className="password-field">
-                <input
-                  name="password"
-                  type={show ? "text" : "password"}
-                  autoComplete={register ? "new-password" : "current-password"}
-                  minLength={register ? 8 : undefined}
-                  required
-                  placeholder={t("Parolingizni kiriting")}
+              )}
+              {(register || reset) && (
+                <RegistrationPhone
+                  disabled={busy}
+                  purpose={reset ? "password-reset" : "registration"}
                 />
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={() => setShow(!show)}
-                  aria-label={
-                    show ? t("Parolni yashirish") : t("Parolni ko‘rsatish")
-                  }
+              )}
+              <Field
+                label={t(reset ? "Yangi parol" : "Parol")}
+                hint={
+                  register || reset
+                    ? t("Kamida 8 belgi. Faqat raqamlardan iborat bo‘lmasin.")
+                    : undefined
+                }
+              >
+                <div className="password-field">
+                  <input
+                    name="password"
+                    type={show ? "text" : "password"}
+                    autoComplete={
+                      register || reset ? "new-password" : "current-password"
+                    }
+                    minLength={register || reset ? 8 : undefined}
+                    maxLength={reset ? 128 : undefined}
+                    required
+                    placeholder={t("Parolingizni kiriting")}
+                  />
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={() => setShow(!show)}
+                    aria-label={
+                      show ? t("Parolni yashirish") : t("Parolni ko‘rsatish")
+                    }
+                  >
+                    {show ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </Field>
+              {reset && (
+                <Field label={t("Yangi parolni takrorlang")}>
+                  <input
+                    name="password_confirm"
+                    type={show ? "text" : "password"}
+                    autoComplete="new-password"
+                    minLength={8}
+                    maxLength={128}
+                    required
+                  />
+                </Field>
+              )}
+              {!register && !reset && (
+                <Link
+                  className="auth-recovery"
+                  href={`/forgot-password${continuation}`}
                 >
-                  {show ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </Field>
-            <button className="button primary full-width" disabled={busy}>
-              {busy
-                ? t("Kutilmoqda…")
-                : register
-                  ? t("Akkaunt yaratish")
-                  : t("Kirish")}
-              <ArrowRight size={18} />
-            </button>
-          </form>
-          <p className="auth-switch">
-            {register
-              ? t("Akkauntingiz bormi?")
-              : t("Hali akkauntingiz yo‘qmi?")}{" "}
-            <Link href={`${register ? "/login" : "/register"}${continuation}`}>
-              {register ? t("Kirish") : t("Ro‘yxatdan o‘tish")}
-            </Link>
-          </p>
+                  {t("Parolni unutdingizmi?")}
+                </Link>
+              )}
+              <button className="button primary full-width" disabled={busy}>
+                {busy
+                  ? t("Kutilmoqda…")
+                  : reset
+                    ? t("Parolni yangilash")
+                    : register
+                      ? t("Akkaunt yaratish")
+                      : t("Kirish")}
+                <ArrowRight size={18} />
+              </button>
+            </form>
+          )}
+          {!done && (
+            <>
+              <p className="auth-switch">
+                {reset
+                  ? t("Parolingiz esingizdami?")
+                  : register
+                    ? t("Akkauntingiz bormi?")
+                    : t("Hali akkauntingiz yo‘qmi?")}{" "}
+                <Link
+                  href={`${register || reset ? "/login" : "/register"}${continuation}`}
+                >
+                  {register || reset ? t("Kirish") : t("Ro‘yxatdan o‘tish")}
+                </Link>
+              </p>
+              {register && (
+                <p className="auth-switch">
+                  <Link href={`/forgot-password${continuation}`}>
+                    {t("Parolni unutdingizmi?")}
+                  </Link>
+                </p>
+              )}
+              {reset && (
+                <p className="auth-help">
+                  {t(
+                    "Telegramga kira olmayapsizmi yoki akkauntingiz avval botga ulanmaganmi?",
+                  )}{" "}
+                  <a
+                    href="https://t.me/murodjonerkinov"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {t("Administratorga yozing")}
+                  </a>
+                </p>
+              )}
+            </>
+          )}
         </div>
         <span className="auth-copyright">
           © {new Date().getFullYear()}

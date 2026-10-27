@@ -65,7 +65,7 @@ async function handle(
   const { path } = await context.params;
   const route = path.join("/");
   if (
-    !/^(auth\/(login|register|registration-code|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences|telegram-link)|partners\/companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?)$/.test(
+    !/^(auth\/(login|register|registration-code|password-reset-code|reset-password|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences)|partners\/companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?)$/.test(
       route,
     )
   ) {
@@ -76,6 +76,8 @@ async function handle(
       "auth/login",
       "auth/register",
       "auth/registration-code",
+      "auth/password-reset-code",
+      "auth/reset-password",
       "auth/logout",
     ].includes(route) &&
     request.method !== "POST"
@@ -147,6 +149,8 @@ async function handle(
       "auth/login",
       "auth/register",
       "auth/registration-code",
+      "auth/password-reset-code",
+      "auth/reset-password",
     ].includes(route);
     if (!anonymous && !access && refresh) {
       renewed = await renew(refresh, request.headers.get("x-real-ip"));
@@ -196,6 +200,7 @@ async function handle(
             { status: upstream.status },
           );
     response.headers.set("Cache-Control", "no-store");
+    if (route === "auth/reset-password" && upstream.ok) clearTokens(response);
     if (route === "auth/me" && upstream.ok && body && JSON.parse(body).password)
       clearTokens(response);
     else if (route === "auth/login" && upstream.ok)
