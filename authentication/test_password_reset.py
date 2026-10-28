@@ -164,7 +164,7 @@ class PasswordResetTests(TestCase):
     def test_password_confirmation_and_strength_are_checked_before_consumption(self, call):
         row = self.issue()
         self.assertEqual(self.submit(row, password_confirm="DifferentSecret").status_code, 400)
-        for password in ("12345678", "short", "existing_driver"):
+        for password in ("12345678", "short"):
             result = self.submit(row, password=password, password_confirm=password)
             self.assertEqual(result.status_code, 400)
             self.assertIn("password", result.data)

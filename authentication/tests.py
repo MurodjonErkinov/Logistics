@@ -98,3 +98,13 @@ class AuthenticationTests(TestCase):
             self.assertEqual(self.client.post("/api/auth/login/", {"username": "nonexistent", "password": "wrong"}).status_code, 401)
         self.assertEqual(self.client.post("/api/auth/login/", {"username": "nonexistent", "password": "wrong"}).status_code, 429)
         cache.clear()
+
+    def test_password_rules_are_length_and_not_only_digits(self):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        # Common or username-like passwords are allowed now.
+        for password in ("password", "driver123", "qwerty12"):
+            validate_password(password, self.user)
+        for password in ("12345678", "abc1234"):
+            with self.assertRaises(ValidationError):
+                validate_password(password, self.user)

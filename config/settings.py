@@ -53,10 +53,9 @@ DATABASES = {"default": {
     "HOST": os.getenv("POSTGRES_HOST", "db"),
     "PORT": os.getenv("POSTGRES_PORT", "5432"),
 }}
+# Matches the hint shown in the UI: at least 8 characters, not digits only.
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 REST_FRAMEWORK = {
