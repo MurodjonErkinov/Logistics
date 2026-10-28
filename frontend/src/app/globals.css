@@ -1801,7 +1801,11 @@ td select {
   display: flex;
   flex-direction: column;
   color: #edf6e3;
-  min-height: 100vh;
+  /* Stay in place while a long form scrolls on the right. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 .auth-story .brand {
   color: #f0f5e8;
@@ -1865,7 +1869,7 @@ td select {
   width: 100%;
   max-width: 390px;
   margin: auto;
-  padding: 35px 0;
+  padding: 20px 0;
 }
 .auth-form-wrap h2 {
   font-size: 32px;
@@ -1877,13 +1881,13 @@ td select {
   font-size: 14px;
   color: #8a997b;
   line-height: 1.9;
-  margin-bottom: 30px;
+  margin-bottom: 22px;
 }
 .auth-form-wrap .form-stack {
-  gap: 22px;
+  gap: 18px;
 }
 .auth-form-wrap input {
-  padding: 14px;
+  padding: 12px 14px;
   font-size: 14px;
 }
 .auth-form-wrap .button {
@@ -2495,11 +2499,12 @@ td select {
     flex-direction: column;
   }
   .auth-story {
-    min-height: 0;
-    padding: 25px 25px 28px;
+    position: static;
+    height: auto;
+    padding: 18px 20px 20px;
   }
   .auth-story .brand {
-    font-size: 25px;
+    font-size: 22px;
   }
   .auth-story-content {
     padding: 0;
@@ -2511,20 +2516,20 @@ td select {
     display: none;
   }
   .auth-story h1 {
-    font-size: 29px;
-    letter-spacing: -1px;
-    margin: 25px 0 0;
-    line-height: 1.5;
+    font-size: 21px;
+    letter-spacing: -0.5px;
+    margin: 12px 0 0;
+    line-height: 1.4;
   }
   .auth-story h1 br:first-of-type {
     display: none;
   }
   .auth-form-side {
-    padding: 26px;
+    padding: 18px 20px;
     flex: 1;
   }
   .auth-form-wrap {
-    padding: 20px 0;
+    padding: 10px 0;
   }
   .auth-form-wrap h2 {
     font-size: 28px;
@@ -2587,6 +2592,16 @@ td select {
   }
 }
 @media (max-width: 450px) {
+  /* Keep short auth fields paired so the password stays on screen. */
+  .auth-form-wrap .form-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  /* 16px stops iOS Safari from zooming and scrolling on focus. */
+  .auth-form-wrap input,
+  .auth-form-wrap select {
+    font-size: 16px;
+  }
   .loads-grid {
     grid-template-columns: 1fr;
   }

@@ -102,6 +102,47 @@ export function AuthForm({
       setBusy(false);
     }
   }
+  const usernameField = (
+    <Field label={t("Foydalanuvchi nomi")}>
+      <input
+        name="username"
+        autoComplete="username"
+        required
+        maxLength={150}
+        placeholder={t("Foydalanuvchi nomingiz")}
+      />
+    </Field>
+  );
+  const passwordField = (
+    <Field
+      label={t(reset ? "Yangi parol" : "Parol")}
+      hint={
+        register || reset
+          ? t("Kamida 8 belgi. Faqat raqamlardan iborat bo‘lmasin.")
+          : undefined
+      }
+    >
+      <div className="password-field">
+        <input
+          name="password"
+          type={show ? "text" : "password"}
+          autoComplete={register || reset ? "new-password" : "current-password"}
+          minLength={register || reset ? 8 : undefined}
+          maxLength={reset ? 128 : undefined}
+          required
+          placeholder={t("Parolingizni kiriting")}
+        />
+        <button
+          className="icon-button"
+          type="button"
+          onClick={() => setShow(!show)}
+          aria-label={show ? t("Parolni yashirish") : t("Parolni ko‘rsatish")}
+        >
+          {show ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      </div>
+    </Field>
+  );
   return (
     <>
       <section className="auth-story">
@@ -114,10 +155,8 @@ export function AuthForm({
         <div className="auth-story-content">
           <span className="hero-kicker">{t("YO‘LLARIMIZ BIRLASHADI")}</span>
           <h1>
-            {t("Yukingiz bor.")}
-            <br />
-            {t("Yo‘lingiz bor.")}
-            <br />
+            {t("Yukingiz bor.")} <br />
+            {t("Yo‘lingiz bor.")} <br />
             <em>{t("YukFlow bor.")}</em>
           </h1>
           <p>
@@ -229,16 +268,20 @@ export function AuthForm({
                   </Field>
                 </div>
               )}
-              {!reset && (
-                <Field label={t("Foydalanuvchi nomi")}>
-                  <input
-                    name="username"
-                    autoComplete="username"
-                    required
-                    maxLength={150}
-                    placeholder={t("Foydalanuvchi nomingiz")}
-                  />
-                </Field>
+              {/* Registration keeps the password above the Telegram step so it
+                  stays in view; reset asks for the code first. */}
+              {register ? (
+                <div className="form-row">
+                  {usernameField}
+                  {passwordField}
+                </div>
+              ) : (
+                !reset && (
+                  <>
+                    {usernameField}
+                    {passwordField}
+                  </>
+                )
               )}
               {(register || reset) && (
                 <RegistrationPhone
@@ -246,49 +289,20 @@ export function AuthForm({
                   purpose={reset ? "password-reset" : "registration"}
                 />
               )}
-              <Field
-                label={t(reset ? "Yangi parol" : "Parol")}
-                hint={
-                  register || reset
-                    ? t("Kamida 8 belgi. Faqat raqamlardan iborat bo‘lmasin.")
-                    : undefined
-                }
-              >
-                <div className="password-field">
-                  <input
-                    name="password"
-                    type={show ? "text" : "password"}
-                    autoComplete={
-                      register || reset ? "new-password" : "current-password"
-                    }
-                    minLength={register || reset ? 8 : undefined}
-                    maxLength={reset ? 128 : undefined}
-                    required
-                    placeholder={t("Parolingizni kiriting")}
-                  />
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() => setShow(!show)}
-                    aria-label={
-                      show ? t("Parolni yashirish") : t("Parolni ko‘rsatish")
-                    }
-                  >
-                    {show ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </Field>
               {reset && (
-                <Field label={t("Yangi parolni takrorlang")}>
-                  <input
-                    name="password_confirm"
-                    type={show ? "text" : "password"}
-                    autoComplete="new-password"
-                    minLength={8}
-                    maxLength={128}
-                    required
-                  />
-                </Field>
+                <div className="form-row">
+                  {passwordField}
+                  <Field label={t("Yangi parolni takrorlang")}>
+                    <input
+                      name="password_confirm"
+                      type={show ? "text" : "password"}
+                      autoComplete="new-password"
+                      minLength={8}
+                      maxLength={128}
+                      required
+                    />
+                  </Field>
+                </div>
               )}
               {!register && !reset && (
                 <Link
