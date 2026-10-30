@@ -24,6 +24,7 @@ import {
 import { NotificationBell } from "./notification-bell";
 import { useSession } from "./session";
 import { roleNames } from "@/lib/types";
+import { basePath } from "@/lib/paths";
 
 const baseNavigation = [
   { href: "/", label: "Yuklar birjasi", icon: Compass },
@@ -31,10 +32,19 @@ const baseNavigation = [
   { href: "/my-loads", label: "Mening yuklarim", icon: Package },
   { href: "/companies", label: "Kompaniyalarim", icon: Building2 },
 ];
+
+function normalizePathname(pathname: string | null) {
+  let path = pathname || "/";
+  if (basePath && (path === basePath || path.startsWith(`${basePath}/`))) {
+    path = path.slice(basePath.length) || "/";
+  }
+  return path.replace(/\/+$/, "") || "/";
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const { t } = useLocale();
 
-  const path = usePathname();
+  const path = normalizePathname(usePathname());
   const { user, logout, loading } = useSession();
   const [menu, setMenu] = useState(false);
   const navigation = [
