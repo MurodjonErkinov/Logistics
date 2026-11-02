@@ -10,6 +10,7 @@ from django.utils import timezone
 def normalize(text):
     text = re.sub(r"[^\w]+", " ", text.casefold()).strip()
     aliases = {"ташкент": "toshkent", "tashkent": "toshkent", "самарканд": "samarqand", "samarkand": "samarqand", "бухара": "buxoro", "bukhara": "buxoro", "наманган": "namangan", "андижан": "andijon", "andijan": "andijon", "навои": "navoiy", "navoi": "navoiy", "фергана": "fargona", "farg ona": "fargona", "нукус": "nukus", "карши": "qarshi", "термез": "termiz", "ургенч": "urganch"}
+    aliases.update({"fergana": "fargona", "karshi": "qarshi", "termez": "termiz", "urgench": "urganch", "jizzakh": "jizzax", "джизак": "jizzax", "gulistan": "guliston", "гулистан": "guliston", "kokand": "qoqon", "qo qon": "qoqon", "коканд": "qoqon"})
     return aliases.get(text, text)
 
 
@@ -59,6 +60,8 @@ def evaluate(ticket, load):
     destination = {"name": load.destination, "lat": load.destination_lat, "lon": load.destination_lon}
     vehicle = load.vehicle_kind or vehicle_kind(load.vehicle_type)
     checks = {"capacity": capacity, "vehicle": None if vehicle == "unknown" else ticket.vehicle.kind == vehicle}
+    if ticket.match_mode == "route" and checks["vehicle"] is False:
+        return None
     choices = sorted(ticket.destinations, key=lambda p: p.get("priority", 1))
     target = next((p for p in choices if place_matches(p, destination) is True), {})
     if ticket.route_mode == "ordered":
@@ -82,7 +85,7 @@ def evaluate(ticket, load):
             amount = amount / load.weight_tons
         elif ticket.price_basis == "trip" and load.price_basis == "ton":
             amount = amount * load.weight_tons
-    checks["price"] = None if amount is None else load.currency == ticket.currency and amount >= threshold
+    checks["price"] = True if threshold == 0 else None if amount is None else load.currency == ticket.currency and amount >= threshold
     if ticket.match_mode != "any_two" and checks["route"] is not True:
         return None
     full = all(v is True for v in checks.values())

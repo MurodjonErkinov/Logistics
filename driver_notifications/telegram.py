@@ -6,7 +6,6 @@ import urllib.request
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
-from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
@@ -14,6 +13,7 @@ from rest_framework.exceptions import ValidationError
 from django.http import Http404
 
 from .locations import LocationError, parse_location
+from .geocoding import reverse_place
 from .models import MatchState, Notification, Preference, TelegramAccount, Ticket, Vehicle
 from .serializers import PreferenceSerializer, TicketSerializer, VehicleSerializer
 from .service import notify, scan_ticket
@@ -65,7 +65,9 @@ def delete_message(chat_id, message_id):
 def say(account, uz, ru=None, **kwargs):
     pref, _ = Preference.objects.get_or_create(owner=account.owner)
     markup = kwargs.pop("reply_markup", inline_keyboard(account, pref.language == "ru"))
-    rows, actions = [], {}
+    rows = []
+    actions = {b["text"]: b["callback_data"] for row in menu_rows(pref.language == "ru") for b in row}
+    ticket_flow = account.state.get("flow") == "ticket"
     for row in markup.get("inline_keyboard", []):
         buttons = []
         for button in row:
@@ -74,9 +76,10 @@ def say(account, uz, ru=None, **kwargs):
                 actions[button["text"]] = button["callback_data"]
         if buttons:
             rows.append(buttons)
+    reply_markup = markup if ticket_flow else {"keyboard": rows, "resize_keyboard": True, "is_persistent": True}
     result = call("sendMessage", chat_id=account.chat_id,
                   text=(ru if ru and pref.language == "ru" else uz)[:4000],
-                  reply_markup={"keyboard": rows, "resize_keyboard": True, "is_persistent": True}, **kwargs)
+                  reply_markup=reply_markup, **kwargs)
     previous = account.ui.get("message_id")
     account.ui = {"message_id": result["message_id"], "actions": actions}
     account.save(update_fields=["ui"])
@@ -85,33 +88,15 @@ def say(account, uz, ru=None, **kwargs):
     return result
 
 
-TICKET_STEPS = ["title", "vehicle", "current_location", "origins", "origin_points", "origin_radius", "route_mode", "destinations", "destination_points", "prices", "etas", "priorities", "radii", "ready_at", "expires_at", "available_tons", "partial_load", "currency", "price_basis", "min_price", "match_mode", "waypoints", "notes", "confirm"]
+TICKET_STEPS = ["title", "vehicle", "origins", "destinations"]
+TICKET_FLOW_VERSION = 2
 VEHICLE_STEPS = ["name", "kind", "capacity_tons", "volume_m3", "plate", "confirm"]
 PREFERENCE_STEPS = ["language", "partial_interval_minutes", "quiet_start", "quiet_end", "timezone", "confirm"]
 PROMPTS = {
-    "title": ("Tiket nomi?", "Название заявки?"),
-    "vehicle": ("Avtomobil raqamini tanlang:", "Выберите номер автомобиля:"),
-    "current_location": ("Hozirgi joyingizni Telegram lokatsiyasi, Google Maps yoki Yandex Maps havolasi bilan yuboring. Shahar nomini yozish ham mumkin.", "Отправьте текущую геопозицию Telegram, ссылку Google Maps или Яндекс Карт. Можно написать город."),
-    "origins": ("Qayerlardan yuk olasiz? Telegram lokatsiyasi, Google Maps yoki Yandex Maps havolasini bittadan yuboring, oxirida Tayyor bosing. Yoki shaharlarni yozing: Toshkent, Chirchiq", "Откуда заберёте груз? Отправляйте геопозиции Telegram или ссылки Google Maps / Яндекс Карт по одной, затем нажмите Готово. Или напишите города через запятую."),
-    "origin_points": ("Shu yuklash joyining Telegram lokatsiyasi yoki Google Maps / Yandex Maps havolasini yuboring. Faqat shahar bo‘yicha izlash uchun O‘tkazib yuborish bosing.", "Отправьте геопозицию Telegram или ссылку Google Maps / Яндекс Карт для этого места погрузки. Для поиска по городу нажмите Пропустить."),
-    "origin_radius": ("Yuklash joylari atrofidagi radius (km)? Faqat shahar mosligi uchun 0.", "Радиус вокруг мест погрузки (км)? 0 — совпадение города."),
-    "route_mode": ("Yo‘nalish turini tanlang.", "Выберите тип маршрута."),
-    "destinations": ("Boradigan joylarni Telegram lokatsiyasi, Google Maps yoki Yandex Maps havolasi bilan bittadan yuboring, oxirida Tayyor bosing. Yoki shaharlarni vergul bilan yozing. Istalgan yo‘nalish uchun -.", "Отправляйте назначения геопозицией Telegram или ссылкой Google Maps / Яндекс Карт по одному, затем нажмите Готово. Или напишите города через запятую. Любое направление — -."),
-    "destination_points": ("Shu manzilning Telegram lokatsiyasi yoki Google Maps / Yandex Maps havolasini yuboring. Faqat shahar bo‘yicha izlash uchun O‘tkazib yuborish bosing.", "Отправьте геопозицию Telegram или ссылку Google Maps / Яндекс Карт для этого назначения. Для поиска по городу нажмите Пропустить."),
-    "prices": ("Har manzil uchun eng kam reys/tonna narxi, shaharlar tartibida vergul bilan. Masalan: 3000000, 5000000. Manzil yo‘q bo‘lsa -.", "Минимальные цены по назначениям через запятую в порядке городов. Например: 3000000, 5000000. Если нет — -."),
-    "etas": ("Har yo‘nalishda yuklashga yetib borish uchun necha soat kerak? Vergul bilan: 1, 2. Yoki - (0 soat).", "Часы до погрузки по каждому направлению: 1, 2. Или - (0 часов)."),
-    "priorities": ("Manzillar ustuvorligi, vergul bilan: 1, 2 (1 — eng afzal). Yoki -.", "Приоритеты через запятую: 1, 2 (1 — предпочтительный). Или -."),
-    "radii": ("Manzillar atrofida radius km, vergul bilan: 30, 0. Yoki -.", "Радиусы назначений в км через запятую: 30, 0. Или -."),
-    "ready_at": ("Qachondan tayyorsiz? YYYY-MM-DD HH:MM (Toshkent vaqti), yoki hozir uchun -.", "Когда готовы? YYYY-MM-DD HH:MM (Ташкент), или - для текущего времени."),
-    "expires_at": ("Necha soat yuk qidirasiz? 1–720.", "Сколько часов искать груз? 1–720."),
-    "available_tons": ("Mashinaning bo‘sh sig‘imi, tonna?", "Свободная грузоподъёмность, тонн?"),
-    "partial_load": ("Qo‘shimcha yuk olasizmi? ha / yoq. Yo‘l-yo‘lakay yuklar uchun ordered va oraliq shaharlarni tanlang.", "Берёте догруз? да / нет. Для попутных грузов выберите ordered и промежуточные города."),
-    "currency": ("Valyuta: UZS / USD", "Валюта: UZS / USD"),
-    "price_basis": ("Narx butun reys uchunmi yoki tonnasigami?", "Цена за рейс или за тонну?"),
-    "min_price": ("Umumiy eng kam narx? Istalgan yo‘nalishda shu narx ishlaydi.", "Общая минимальная цена? Используется для любого направления."),
-    "match_mode": ("Qaysi yuklar haqida xabar berilsin?", "О каких совпадениях уведомлять?"),
-    "waypoints": ("Oraliq joylarni ham Telegram lokatsiyasi yoki Google Maps / Yandex Maps havolasi bilan yuboring, oxirida Tayyor bosing. Shaharlarni yozish yoki - bilan o‘tkazish ham mumkin.", "Отправляйте промежуточные точки геопозицией Telegram или ссылками Google Maps / Яндекс Карт, затем Готово. Можно написать города через запятую или - для пропуска."),
-    "notes": ("Qo‘shimcha izoh yoki -.", "Примечание или -."),
+    "title": ("🎫 Tiket nomini kiriting:", "🎫 Введите название заявки:"),
+    "vehicle": ("🚛 Mashinani tanlang:", "🚛 Выберите машину:"),
+    "origins": ("📍 Qayerdan yuk olasiz?\nTelegram lokatsiyasi yoki Google Maps / Yandex Maps havolasini yuboring. Shahar va manzil avtomatik aniqlanadi.", "📍 Откуда заберёте груз?\nОтправьте геопозицию Telegram или ссылку Google Maps / Яндекс Карт. Город и адрес определятся автоматически."),
+    "destinations": ("🏁 Qayerga yuk olib bora olasiz?\nTelegram lokatsiyasi yoki Google Maps / Yandex Maps havolasini yuboring. Boradigan joy muhim bo‘lmasa, «🌍 Istalgan manzil»ni bosing.", "🏁 Куда можете отвезти груз?\nОтправьте геопозицию Telegram или ссылку Google Maps / Яндекс Карт. Если направление не важно, нажмите «🌍 Любое направление»."),
     "name": ("Mashina nomi? Masalan: Isuzu 01", "Название машины? Например: Isuzu 01"),
     "kind": ("Mashina turini tanlang.", "Выберите тип машины."),
     "capacity_tons": ("Maksimal sig‘im, tonna?", "Максимальная грузоподъёмность, тонн?"),
@@ -154,36 +139,13 @@ def confirmation(account):
     pref, _ = Preference.objects.get_or_create(owner=account.owner)
     ru = pref.language == "ru"
     lines = ["Проверьте данные:" if ru else "Ma’lumotlarni tekshiring:"]
-    names = {"title": ("Tiket", "Заявка"), "name": ("Mashina", "Машина"), "capacity_tons": ("Sig‘im (t)", "Грузоподъёмность (т)"), "volume_m3": ("Hajm (m³)", "Объём (м³)"), "plate": ("Davlat raqami", "Госномер"), "available_tons": ("Bo‘sh sig‘im (t)", "Свободная грузоподъёмность (т)"), "min_price": ("Eng kam narx", "Минимальная цена"), "currency": ("Valyuta", "Валюта"), "notes": ("Izoh", "Примечание"), "quiet_start": ("Tinch vaqt boshlanishi", "Начало тихих часов"), "quiet_end": ("Tinch vaqt tugashi", "Конец тихих часов"), "partial_interval_minutes": ("Jamlanma oralig‘i (daqiqa)", "Интервал подборки (минут)"), "timezone": ("Vaqt zonasi", "Часовой пояс"), "language": ("Til", "Язык")}
+    names = {"name": ("Mashina", "Машина"), "capacity_tons": ("Sig‘im (t)", "Грузоподъёмность (т)"), "volume_m3": ("Hajm (m³)", "Объём (м³)"), "plate": ("Davlat raqami", "Госномер"), "available_tons": ("Bo‘sh sig‘im (t)", "Свободная грузоподъёмность (т)"), "min_price": ("Eng kam narx", "Минимальная цена"), "currency": ("Valyuta", "Валюта"), "notes": ("Izoh", "Примечание"), "quiet_start": ("Tinch vaqt boshlanishi", "Начало тихих часов"), "quiet_end": ("Tinch vaqt tugashi", "Конец тихих часов"), "partial_interval_minutes": ("Jamlanma oralig‘i (daqiqa)", "Интервал подборки (минут)"), "timezone": ("Vaqt zonasi", "Часовой пояс"), "language": ("Til", "Язык")}
     for key, titles in names.items():
         if key in data:
             lines.append(f"{titles[int(ru)]}: {data[key] or '—'}")
     for key in ("route_mode", "price_basis", "match_mode", "kind"):
         if key in data:
             lines.append(label(data[key], ru))
-    for key, titles in [("origins", ("Yuklash", "Погрузка")), ("waypoints", ("Oraliq", "Через")), ("destinations", ("Manzil", "Назначение"))]:
-        for place in data.get(key, []):
-            line = f"{titles[int(ru)]}: {place['name']} · {place.get('radius_km', 0)} km"
-            if "min_price" in place:
-                line += f" · {place['min_price']} {data.get('currency', '')}"
-            if key == "destinations":
-                line += f" · {place.get('eta_hours', 0)} h · {'Приоритет' if ru else 'Ustuvorlik'} {place.get('priority', 1)}"
-            lines.append(line)
-            if place.get("lat") is not None:
-                lines.append(place.get("source_url") or f"https://www.google.com/maps/search/?api=1&query={place['lat']},{place['lon']}")
-    if data.get("vehicle"):
-        vehicle = Vehicle.objects.filter(pk=data['vehicle'], owner=account.owner).first()
-        lines.append(f"🚛 {vehicle.name if vehicle else '—'}")
-    if data.get("current_location"):
-        place = data["current_location"]
-        lines.append(f"📍 {place.get('name', '')}")
-        if place.get("lat") is not None:
-            lines.append(place.get("source_url") or f"https://www.google.com/maps/search/?api=1&query={place['lat']},{place['lon']}")
-    for key, title in [("ready_at", "🕒"), ("expires_at", "⏰")]:
-        if data.get(key):
-            lines.append(f"{title} {datetime.fromisoformat(data[key]).astimezone(ZoneInfo('Asia/Tashkent')):%Y-%m-%d %H:%M} (Toshkent)")
-    if "partial_load" in data:
-        lines.append(("Догруз: " if ru else "Qo‘shimcha yuk: ") + label("ha" if data["partial_load"] else "yoq", ru))
     return "\n".join(lines)
 
 
@@ -219,28 +181,34 @@ def inline_keyboard(account, ru=False):
     def button(value, title=None):
         return {"text": title or label(value, ru), "callback_data": f"u:{nonce}:{value}"}
     rows = []
-    if not state.get("pending_place"):
-        choices = {"route_mode": ["alternatives", "ordered", "anywhere"], "kind": ["tent", "van", "refrigerator", "isothermal", "flatbed", "tanker", "dump", "lowbed", "container", "other"], "currency": ["UZS", "USD"], "price_basis": ["trip", "ton"], "match_mode": ["any_two", "route", "full"], "partial_load": ["ha", "yoq"], "partial_interval_minutes": ["0", "15", "30", "60"], "language": ["uz", "ru"], "expires_at": ["12", "24", "72", "168"], "origin_radius": ["0", "10", "25", "50", "100"]}
+    if state["flow"] == "ticket":
         if key == "vehicle":
             rows += [[button(str(v.pk), f"🚛 {v.name} · {v.capacity_tons} t")] for v in Vehicle.objects.filter(owner=account.owner)]
             rows.append([{"text": "➕ Добавить машину" if ru else "➕ Mashina qo‘shish", "callback_data": "nav:vehicle"}])
-        elif key == "confirm":
-            rows.append([button("ha", "✅ Сохранить" if ru else "✅ Saqlash")])
-        elif key in choices:
-            values = choices[key]
-            rows += [[button(v) for v in values[i:i+2]] for i in range(0, len(values), 2)]
-        if key in ("current_location", "origins", "destinations", "waypoints", "origin_points", "destination_points"):
-            rows.append([button("location", "📍 Отправить точку" if ru else "📍 Lokatsiya yuborish"), button("maps", "🗺 Ссылка карты" if ru else "🗺 Xarita havolasi")])
-        if key in ("origins", "destinations", "waypoints"):
-            rows.append([button("Tayyor", "✅ Готово" if ru else "✅ Tayyor")])
-        if key in ("origin_points", "destination_points"):
-            rows.append([button("O‘tkazib yuborish", "⏭ Пропустить" if ru else "⏭ O‘tkazib yuborish")])
-        elif key in ("current_location", "destinations", "waypoints", "notes", "volume_m3", "plate", "quiet_start", "quiet_end", "prices", "etas", "priorities", "radii"):
-            rows.append([button("-", "⏭ Пропустить" if ru else "⏭ O‘tkazib yuborish")])
-        elif key == "ready_at":
-            rows.append([button("-", "🕒 Сейчас" if ru else "🕒 Hozir")])
-        if state.get("instance") and key != "confirm":
-            rows.append([button(".", "Оставить значение" if ru else "Avvalgi qiymatni saqlash")])
+        elif key in ("origins", "destinations"):
+            places = state["data"].get(key, [])
+            if places:
+                if len(places) < 10:
+                    rows.append([button("add_place", "➕ Добавить адрес" if ru else "➕ Manzil qo‘shish")])
+                if key == "origins":
+                    done_label = "✅ Далее" if ru else "✅ Davom etish"
+                elif state.get("instance"):
+                    done_label = "✅ Сохранить заявку" if ru else "✅ Tiketni saqlash"
+                else:
+                    done_label = "✅ Создать заявку" if ru else "✅ Tiketni ochish"
+                rows.append([button("done", done_label)])
+            if key == "destinations":
+                rows.append([button("anywhere", "🌍 Любое направление" if ru else "🌍 Istalgan manzil")])
+        rows.append([button("/back", "⬅️ Назад" if ru else "⬅️ Orqaga"), button("/cancel", "✖️ Отмена" if ru else "✖️ Bekor qilish")])
+        return {"inline_keyboard": rows}
+    choices = {"kind": ["tent", "van", "refrigerator", "isothermal", "flatbed", "tanker", "dump", "lowbed", "container", "other"], "partial_interval_minutes": ["0", "15", "30", "60"], "language": ["uz", "ru"]}
+    if key == "confirm":
+        rows.append([button("ha", "✅ Сохранить" if ru else "✅ Saqlash")])
+    elif key in choices:
+        values = choices[key]
+        rows += [[button(v) for v in values[i:i+2]] for i in range(0, len(values), 2)]
+    if key in ("volume_m3", "plate", "quiet_start", "quiet_end"):
+        rows.append([button("-", "⏭ Пропустить" if ru else "⏭ O‘tkazib yuborish")])
     rows.append([button("/back", "⬅️ Назад" if ru else "⬅️ Orqaga"), button("/cancel", "✖️ Отмена" if ru else "✖️ Bekor qilish")])
     rows.append([{"text": "🏠 Меню" if ru else "🏠 Menyu", "callback_data": "nav:menu"}])
     return {"inline_keyboard": rows}
@@ -254,31 +222,25 @@ def prompt(account):
     state["ui_nonce"] = secrets.token_hex(4)
     account.save(update_fields=["state"])
     kwargs = {}
-    if state.get("pending_place"):
-        return say(account, "Bu joy qaysi shaharda? Shahar nomini yozing — yuklarni shahar bo‘yicha ham topish uchun.", "В каком городе эта точка? Напишите город — он нужен и для поиска грузов по названию.", **kwargs)
-    if key in ("origin_points", "destination_points"):
-        places = state["data"]["origins" if key == "origin_points" else "destinations"]
-        index = next((i for i, place in enumerate(places) if i >= state.get("point_index", 0) and place.get("lat") is None), len(places))
-        state["point_index"] = index
-        if index >= len(places):
-            state.pop("point_index", None)
-            state["index"] += 1
-            account.save(update_fields=["state"])
-            return prompt(account)
-        account.save(update_fields=["state"])
-        uz = f"📍 {index + 1}/{len(places)}: {places[index]['name']}\n" + uz
-        ru = f"📍 {index + 1}/{len(places)}: {places[index]['name']}\n" + ru
-    if key in ("origins", "destinations", "waypoints") and state.get("collecting_places") == key:
-        names = "\n" + "\n".join(f"✓ {place['name']}" for place in state["data"].get(key, []))
-        uz += names
-        ru += names
-    if key == "vehicle":
-        vehicles = list(Vehicle.objects.filter(owner=account.owner))
-        if not vehicles:
-            return say(account, "Avval Mashina qo‘shish tugmasi orqali avtomobil kiriting.", "Сначала добавьте автомобиль кнопкой Добавить машину.")
-        names = "\n" + "\n".join(f"{v.pk}: {v.name} · {v.capacity_tons} t" for v in vehicles)
-        uz += names
-        ru += names
+    if state["flow"] == "ticket":
+        if key in ("origins", "destinations"):
+            places = state["data"].get(key, [])
+            if places:
+                names = "\n".join(f"{i}. {p['name']}" + (f" — {p['address'][:140]}" if p.get("address") else "") for i, p in enumerate(places, 1))
+                uz = f"{'📍 Yuk olish manzillari' if key == 'origins' else '🏁 Yuk olib borish manzillari'}:\n{names}\n\n"
+                ru = f"{'📍 Адреса погрузки' if key == 'origins' else '🏁 Адреса назначения'}:\n{names}\n\n"
+                if state.get("adding_place"):
+                    uz += "Yana bir lokatsiya yoki xarita havolasini yuboring."
+                    ru += "Отправьте ещё одну геопозицию или ссылку на карту."
+                else:
+                    uz += "Yana manzil qo‘shing yoki " + ("davom eting." if key == "origins" else "tiketni saqlang. Mos yuklar saytga va shu botga keladi.")
+                    ru += "Добавьте адрес или " + ("продолжите." if key == "origins" else "сохраните заявку. Подходящие грузы появятся на сайте и в этом боте.")
+                if any(p.get("geocoded") for p in places):
+                    uz += "\n© OpenStreetMap contributors — https://www.openstreetmap.org/copyright"
+                    ru += "\n© OpenStreetMap contributors — https://www.openstreetmap.org/copyright"
+        if key == "vehicle" and not Vehicle.objects.filter(owner=account.owner).exists():
+            uz, ru = "Avval mashina qo‘shing. Keyin tiket ochishni shu joydan davom ettirasiz.", "Сначала добавьте машину. Затем продолжим создание заявки с этого шага."
+        return say(account, uz, ru, link_preview_options={"is_disabled": True})
     if key == "confirm":
         summary = confirmation(account)
         return say(account, summary + "\n\n" + (ru if pref.language == "ru" else uz))
@@ -286,8 +248,7 @@ def prompt(account):
 
 
 def parse_answer(key, text, message, data, state=None):
-    state = state if state is not None else {}
-    if key in ("route_mode", "price_basis", "match_mode", "kind", "partial_load"):
+    if key == "kind":
         for value, labels in OPTION_LABELS.items():
             if text in labels:
                 text = value
@@ -297,86 +258,9 @@ def parse_answer(key, text, message, data, state=None):
         if not result.is_finite() or result < 0:
             raise ValueError()
         return str(result)
-    if key in ("origins", "destinations", "waypoints"):
-        if text in ("Tayyor", "Готово"):
-            if not data.get(key):
-                raise LocationError("empty")
-            state.pop("collecting_places", None)
-            return
-        if text == "-":
-            if key == "origins":
-                raise LocationError("empty")
-            data[key] = []
-            state.pop("collecting_places", None)
-            return
-        is_point = bool(message.get("location") or message.get("venue") or "http" in text)
-        if is_point or state.get("collecting_places") == key:
-            place = parse_location(text, message)
-            existing = data.get(key, []) if state.get("collecting_places") == key else []
-            if len(existing) >= 10:
-                raise LocationError("limit")
-            data[key] = existing
-            state["collecting_places"] = key
-            if place.get("lat") is not None and (place["name"] == "GPS" or message.get("venue")):
-                state["pending_place"] = place
-            else:
-                existing.append(place)
-            return False
-        places = [{"name": name.strip(), "radius_km": 0} for name in text.split(",") if name.strip()]
-        if not places or len(places) > 10 or any(len(p["name"]) > 150 for p in places):
-            raise LocationError("name")
-        data[key] = places
-    elif key in ("origin_points", "destination_points"):
-        places = data["origins" if key == "origin_points" else "destinations"]
-        index = state.get("point_index", 0)
-        if index >= len(places):
-            return
-        if text == "-":
-            state["point_index"] = len(places)
-            return False
-        if text in ("O‘tkazib yuborish", "Пропустить"):
-            places[index].pop("lat", None)
-            places[index].pop("lon", None)
-            places[index].pop("source_url", None)
-        else:
-            place = parse_location(text, message)
-            if place.get("lat") is None:
-                raise LocationError("pin")
-            places[index].update({k: v for k, v in place.items() if k in ("lat", "lon", "source_url")})
-        state["point_index"] = index + 1
-        return False
-    elif key == "origin_radius":
-        radius = float(number(text))
-        if radius > 500:
-            raise ValueError()
-        for place in data["origins"]:
-            place["radius_km"] = radius
-    elif key in ("prices", "etas", "priorities", "radii"):
-        places = data["destinations"]
-        if text == "-":
-            return
-        values = text.split(",")
-        if len(values) != len(places):
-            raise ValueError()
-        field = {"prices": "min_price", "etas": "eta_hours", "priorities": "priority", "radii": "radius_km"}[key]
-        for place, value in zip(places, values):
-            place[field] = number(value.strip()) if key == "prices" else float(number(value.strip()))
-    elif key == "current_location":
-        data[key] = {} if text == "-" else parse_location(text, message)
-    elif key == "ready_at":
-        data[key] = (timezone.now() if text == "-" else datetime.strptime(text, "%Y-%m-%d %H:%M").replace(tzinfo=ZoneInfo("Asia/Tashkent"))).isoformat()
-    elif key == "expires_at":
-        hours = int(text)
-        if not 1 <= hours <= 720:
-            raise ValueError()
-        data[key] = (timezone.now() + timedelta(hours=hours)).isoformat()
-    elif key in ("partial_load"):
-        if text.casefold() not in ("ha", "yoq", "да", "нет"):
-            raise ValueError()
-        data[key] = text.casefold() in ("ha", "да")
-    elif key in ("vehicle", "partial_interval_minutes"):
+    if key == "partial_interval_minutes":
         data[key] = int(text)
-    elif key in ("capacity_tons", "available_tons", "min_price", "volume_m3"):
+    elif key in ("capacity_tons", "volume_m3"):
         data[key] = None if key == "volume_m3" and text == "-" else number(text)
     elif key in ("quiet_start", "quiet_end"):
         data[key] = None if text == "-" else datetime.strptime(text, "%H:%M").time().isoformat()
@@ -385,6 +269,89 @@ def parse_answer(key, text, message, data, state=None):
         if key in choices and text not in choices[key]:
             raise ValueError()
         data[key] = "" if text == "-" else text
+
+
+def ticket_state():
+    return {"flow": "ticket", "version": TICKET_FLOW_VERSION, "index": 0, "data": {}}
+
+
+def save_ticket(account):
+    state = account.state
+    data = state["data"]
+    vehicle = Vehicle.objects.filter(pk=data.get("vehicle"), owner=account.owner).first()
+    if vehicle is None:
+        raise ValidationError("O‘zingizga tegishli mashinani tanlang.")
+    now = timezone.now()
+    # Every hidden search option has a predictable default in the short bot flow.
+    fields = ("name", "lat", "lon", "source_url", "address", "geocoded")
+    places = {key: [{k: v for k, v in p.items() if k in fields} for p in data.get(key, [])] for key in ("origins", "destinations")}
+    payload = {
+        "title": data.get("title", ""), "vehicle": vehicle.pk, **places,
+        "route_mode": "anywhere" if data.get("route_mode") == "anywhere" else "alternatives",
+        "current_location": places["origins"][0] if places["origins"] else {},
+        "ready_at": now.isoformat(), "expires_at": (now + timedelta(days=7)).isoformat(),
+        "available_tons": str(vehicle.capacity_tons), "status": "active", "waypoints": [],
+        "partial_load": False, "min_price": "0", "currency": "UZS", "price_basis": "trip",
+        "match_mode": "route", "notes": "",
+    }
+    with transaction.atomic():
+        instance = Ticket.objects.filter(pk=state.get("instance"), owner=account.owner).first()
+        if state.get("instance") and instance is None:
+            raise ValidationError("Tiket topilmadi.")
+        if instance is None and Ticket.objects.filter(owner=account.owner, status__in=["active", "paused"]).count() >= 20:
+            raise ValidationError("At most 20 active or paused tickets.")
+        serializer = TicketSerializer(instance, data=payload, context={"request": SimpleNamespace(user=account.owner)})
+        serializer.is_valid(raise_exception=True)
+        ticket = serializer.save(owner=account.owner)
+        if instance is None:
+            notify(ticket, "ticket_created", f"ticket:{ticket.pk}")
+        scan_ticket(ticket.pk)
+        account.state = {}
+        account.save(update_fields=["state"])
+    return say(account, f"✅ #{ticket.pk} — {ticket.title}\nTiket saytda ham, botda ham saqlandi. Mos yuklar haqida shu botda va saytda xabar olasiz. Qidiruv 7 kun faol.", f"✅ #{ticket.pk} — {ticket.title}\nЗаявка сохранена на сайте и в боте. Уведомления о подходящих грузах придут сюда и на сайт. Поиск активен 7 дней.")
+
+
+def ticket_answer(account, key, text, message):
+    state, data = account.state, account.state["data"]
+    if key == "title":
+        if not text or len(text) > 120:
+            raise ValidationError("Tiket nomi 1–120 belgidan iborat bo‘lsin.")
+        data["title"] = text
+    elif key == "vehicle":
+        if not text.isdigit() or not Vehicle.objects.filter(pk=int(text), owner=account.owner).exists():
+            raise ValidationError("O‘zingizga tegishli mashinani tanlang.")
+        data["vehicle"] = int(text)
+    else:
+        if key == "destinations" and text == "anywhere":
+            data.update(destinations=[], route_mode="anywhere")
+            return save_ticket(account)
+        if text in ("done", "Tayyor", "Готово"):
+            if not data.get(key):
+                raise LocationError("empty")
+            state.pop("adding_place", None)
+            if key == "destinations":
+                data["route_mode"] = "alternatives"
+                return save_ticket(account)
+        elif text == "add_place":
+            state["adding_place"] = True
+            account.save(update_fields=["state"])
+            return prompt(account)
+        else:
+            places = data.get(key, [])
+            if len(places) >= 10:
+                raise LocationError("limit")
+            place = parse_location(text, message)
+            if place.get("lat") is None:
+                raise LocationError("pin")
+            place.update(reverse_place(place["lat"], place["lon"]))
+            if not any(p.get("lat") == place["lat"] and p.get("lon") == place["lon"] for p in places):
+                data[key] = places + [place]
+            state.pop("adding_place", None)
+            account.save(update_fields=["state"])
+            return prompt(account)
+    state["index"] += 1
+    account.save(update_fields=["state"])
+    return prompt(account)
 
 
 def callback(account, query):
@@ -463,6 +430,12 @@ def handle_update(update):
         account.ui = {"message_id": result["message_id"], "actions": {}}
         account.save(update_fields=["ui"])
         return
+    if account.state.get("flow") == "ticket" and account.state.get("version") != TICKET_FLOW_VERSION:
+        account.state = ticket_state()
+        account.save(update_fields=["state"])
+        if query and query.get("id"):
+            call("answerCallbackQuery", callback_query_id=query["id"])
+        return prompt(account)
     if not query:
         delete_message(chat_id, message.get("message_id"))
         payload = None if update.get("_resolved") else account.ui.get("actions", {}).get(text)
@@ -528,7 +501,9 @@ def handle_update(update):
                    reply_markup={"inline_keyboard": rows})
     if text in ("/ticket", "/vehicle", "/settings") or text.startswith("/edit "):
         flow = "vehicle" if text == "/vehicle" else "preferences" if text == "/settings" else "ticket"
-        state = {"flow": flow, "index": 0, "data": {"match_mode": "any_two"} if flow == "ticket" else {}}
+        state = ticket_state() if flow == "ticket" else {"flow": flow, "index": 0, "data": {}}
+        if flow == "vehicle" and account.state.get("flow") == "ticket":
+            state["resume_ticket"] = account.state
         if text.startswith("/edit "):
             try:
                 ticket = Ticket.objects.get(pk=int(text.split()[1]), owner=account.owner)
@@ -553,60 +528,47 @@ def handle_update(update):
         return say(account, "Kerakli bo‘limni tanlang.")
     state = account.state
     if text == "/back":
-        state.pop("pending_place", None)
-        state.pop("collecting_places", None)
-        state.pop("point_index", None)
+        state.pop("adding_place", None)
         state["index"] = max(0, state["index"] - 1)
         account.save(update_fields=["state"])
         return prompt(account)
     key = steps(state)[state["index"]]
     try:
+        if state["flow"] == "ticket":
+            return ticket_answer(account, key, text, message)
         if key == "confirm":
             if text.casefold() not in ("ha", "да"):
                 return prompt(account)
-            ctx = {"request": SimpleNamespace(user=account.owner)}
-            if state["flow"] == "ticket":
-                instance = Ticket.objects.filter(pk=state.get("instance"), owner=account.owner).first()
-                if instance is None and Ticket.objects.filter(owner=account.owner, status__in=["active", "paused"]).count() >= 20:
-                    raise ValidationError("At most 20 active or paused tickets.")
-                serializer = TicketSerializer(instance, data=state["data"], context=ctx)
-            elif state["flow"] == "vehicle":
+            if state["flow"] == "vehicle":
                 serializer = VehicleSerializer(data=state["data"])
             else:
                 pref, _ = Preference.objects.get_or_create(owner=account.owner)
                 serializer = PreferenceSerializer(pref, data=state["data"], partial=True)
             serializer.is_valid(raise_exception=True)
             obj = serializer.save(owner=account.owner)
-            if isinstance(obj, Ticket):
-                if not state.get("instance"):
-                    notify(obj, "ticket_created", f"ticket:{obj.pk}")
-                scan_ticket(obj.pk)
+            if isinstance(obj, Vehicle) and state.get("resume_ticket"):
+                account.state = state["resume_ticket"]
+                account.state["data"]["vehicle"] = obj.pk
+                account.state["index"] = TICKET_STEPS.index("origins")
+                account.save(update_fields=["state"])
+                return prompt(account)
             account.state = {}
             account.save(update_fields=["state"])
             return say(account, "✅ Saqlandi. Kerakli bo‘limni tanlang.", "✅ Сохранено. Выберите раздел.")
-        if state.get("pending_place"):
-            place = parse_location(text)
-            if "lat" in place or text in ("-", "Tayyor", "Готово"):
-                raise LocationError("name")
-            state["pending_place"]["name"] = place["name"]
-            state["data"][key].append(state.pop("pending_place"))
-            account.save(update_fields=["state"])
-            return prompt(account)
         if text != "." or not state.get("instance"):
             if parse_answer(key, text, message, state["data"], state) is False:
                 account.save(update_fields=["state"])
                 return prompt(account)
-        state.pop("collecting_places", None)
-        state.pop("point_index", None)
         state["index"] += 1
         account.save(update_fields=["state"])
         prompt(account)
     except LocationError as exc:
         errors = {
+            "geocoding": ("Bu nuqtaning shahar/manzilini avtomatik aniqlab bo‘lmadi. Lokatsiya yoki aniq Google Maps / Yandex Maps havolasini qayta yuboring.", "Не удалось автоматически определить город и адрес точки. Повторно отправьте геопозицию или ссылку на точку Google Maps / Яндекс Карт."),
             "network": ("Xarita havolasini ochib bo‘lmadi. Qayta yuboring yoki Telegram lokatsiyasini yuboring.", "Не удалось открыть ссылку. Повторите или отправьте геопозицию Telegram."),
-            "name": ("Shahar nomini yozing.", "Напишите название города."),
+            "name": ("Telegram lokatsiyasi yoki xarita havolasini yuboring.", "Отправьте геопозицию Telegram или ссылку на карту."),
             "empty": ("Avval kamida bitta joy yuboring.", "Сначала отправьте хотя бы одну точку."),
-            "limit": ("Ko‘pi bilan 10 ta joy qo‘shish mumkin. Tayyor bosing.", "Можно добавить до 10 точек. Нажмите Готово."),
+            "limit": ("Ko‘pi bilan 10 ta manzil qo‘shish mumkin. Davom etish yoki Tiketni ochish tugmasini bosing.", "Можно добавить до 10 точек. Нажмите Готово."),
         }
         uz, ru = errors.get(str(exc), ("Google Maps yoki Yandex Maps’da aniq nuqtani tanlab Ulashish havolasini yuboring. Yoki Telegram lokatsiyasini yuboring.", "Выберите точку в Google Maps или Яндекс Картах и отправьте ссылку Поделиться. Или отправьте геопозицию Telegram."))
         say(account, uz, ru)

@@ -11,6 +11,8 @@ from .models import Notification, Preference, Ticket, Vehicle
 
 class PlaceSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
+    address = serializers.CharField(max_length=300, required=False, allow_blank=True)
+    geocoded = serializers.BooleanField(required=False)
     source_url = serializers.URLField(max_length=2048, required=False)
     lat = serializers.FloatField(min_value=-90, max_value=90, required=False, allow_null=True)
     lon = serializers.FloatField(min_value=-180, max_value=180, required=False, allow_null=True)

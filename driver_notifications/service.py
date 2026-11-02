@@ -16,7 +16,8 @@ def snapshot(load):
 def notify(ticket, kind, key, load=None, result=None, data=None):
     pref, _ = Preference.objects.get_or_create(owner=ticket.owner)
     result = result or {}
-    delay = pref.partial_interval_minutes if result.get("level") == "partial" else 0
+    # Route-based searches already require the chosen route and capacity.
+    delay = pref.partial_interval_minutes if result.get("level") == "partial" and ticket.match_mode == "any_two" else 0
     return Notification.objects.get_or_create(event_key=key, defaults={"owner": ticket.owner, "ticket": ticket, "load": load, "kind": kind, "level": result.get("level", ""), "snapshot": data or (snapshot(load) if load else {}), "reasons": result, "deliver_after": timezone.now() + timedelta(minutes=delay)})
 
 

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from .models import Preference, TelegramAccount, Vehicle
-from .telegram import TICKET_STEPS, VEHICLE_STEPS, handle_update, prompt
+from .telegram import TICKET_FLOW_VERSION, TICKET_STEPS, VEHICLE_STEPS, handle_update, prompt
 
 
 @patch("driver_notifications.telegram.call", return_value={"message_id": 1})
@@ -67,7 +67,7 @@ class InlineBotTests(TestCase):
 
     def test_vehicle_choice_and_invalid_callback_do_not_cross_steps(self, call):
         vehicle = Vehicle.objects.create(owner=self.driver, name="Volvo", kind="tent", capacity_tons=20)
-        self.account.state = {"flow": "ticket", "index": TICKET_STEPS.index("vehicle"), "data": {}}
+        self.account.state = {"flow": "ticket", "version": TICKET_FLOW_VERSION, "index": TICKET_STEPS.index("vehicle"), "data": {}}
         self.account.save()
         prompt(self.account)
         self.account.refresh_from_db()
@@ -76,15 +76,12 @@ class InlineBotTests(TestCase):
         self.tap(self.payload(call, f":{vehicle.pk}"))
         self.assertEqual(self.account.state["data"]["vehicle"], vehicle.pk)
 
-    def test_location_help_keeps_step_and_back_cancel_available(self, call):
-        self.account.state = {"flow": "ticket", "index": TICKET_STEPS.index("current_location"), "data": {}}
+    def test_ticket_back_and_cancel_are_inline(self, call):
+        self.account.state = {"flow": "ticket", "version": TICKET_FLOW_VERSION, "index": TICKET_STEPS.index("origins"), "data": {}}
         self.account.save()
         prompt(self.account)
         self.account.refresh_from_db()
-        self.tap(self.payload(call, ":location"))
-        self.assertIn("Skrepka", self.sent(call).kwargs["text"])
-        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("current_location"))
-        self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
+        self.assertIn("inline_keyboard", self.sent(call).kwargs["reply_markup"])
         self.tap(self.payload(call, ":/back"))
         self.assertEqual(self.account.state["index"], TICKET_STEPS.index("vehicle"))
         self.tap(self.payload(call, ":/cancel"))
@@ -95,16 +92,17 @@ class InlineBotTests(TestCase):
         for flow, steps in (("ticket", TICKET_STEPS), ("vehicle", VEHICLE_STEPS)):
             for i, key in enumerate(steps):
                 with self.subTest(flow=flow, step=key):
-                    self.account.state = {"flow": flow, "index": i, "data": {"origins": [{"name": "Toshkent"}], "destinations": [{"name": "Samarqand"}]}}
+                    self.account.state = {"flow": flow, "version": TICKET_FLOW_VERSION, "index": i, "data": {"origins": [{"name": "Toshkent"}], "destinations": [{"name": "Samarqand"}]}}
                     self.account.save()
                     prompt(self.account)
                     markup = self.sent(call).kwargs["reply_markup"]
-                    self.assertIn("keyboard", markup)
-                    self.assertNotIn("inline_keyboard", markup)
-                    buttons = [b for row in markup["keyboard"] for b in row]
-                    self.assertTrue(any(b["text"] == "🏠 Menyu" for b in buttons))
-                    self.assertTrue(markup["resize_keyboard"])
-                    self.assertTrue(markup["is_persistent"])
+                    if flow == "ticket":
+                        self.assertIn("inline_keyboard", markup)
+                        self.assertNotIn("keyboard", markup)
+                    else:
+                        self.assertIn("keyboard", markup)
+                        self.assertTrue(markup["resize_keyboard"])
+                        self.assertTrue(markup["is_persistent"])
 
     def test_russian_choices_are_inline(self, call):
         Preference.objects.create(owner=self.driver, language="ru")

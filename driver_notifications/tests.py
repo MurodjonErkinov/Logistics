@@ -172,17 +172,19 @@ class DriverTests(TestCase):
         self.assertEqual(self.client.get("/api/driver/notifications/unread/").data["count"],1)
 
     @patch("driver_notifications.telegram.call",return_value={"message_id":1})
-    def test_bot_wizard_saves_vehicle_and_ticket(self, call):
+    @patch("driver_notifications.telegram.reverse_place", return_value={"name": "Toshkent", "address": "Toshkent", "geocoded": True})
+    def test_bot_wizard_saves_vehicle_and_ticket(self, reverse, call):
         TelegramAccount.objects.create(owner=self.driver,chat_id=123)
         def message(text):
             handle_update({"message":{"chat":{"id":123,"type":"private"},"from":{"id":123},"text":text}})
         for text in ["/vehicle","Volvo","tent","20","80","01A123AA","ha"]:
             message(text)
         self.assertEqual(Vehicle.objects.filter(owner=self.driver).count(),2)
-        for text in ["/ticket","Bot tiket",str(self.vehicle.pk),"Toshkent","Toshkent","-","0","alternatives","Samarqand, Buxoro","-","2000000, 4000000","1, 2","1, 2","0, 0","-","168","20","yoq","UZS","trip","2000000","any_two","-","-","ha"]:
+        for text in ["/ticket", "Bot tiket", str(self.vehicle.pk), "41.3,69.2", "done", "anywhere"]:
             message(text)
-        self.assertEqual(Ticket.objects.filter(title="Bot tiket").count(),1)
-        self.assertEqual(len(Ticket.objects.get().destinations),2)
+        self.assertEqual(Ticket.objects.filter(title="Bot tiket").count(), 1)
+        self.assertEqual(Ticket.objects.get().route_mode, "anywhere")
+        self.assertEqual(Ticket.objects.get().match_mode, "route")
 
     @patch("driver_notifications.telegram.call",return_value={"message_id":1})
     def test_bot_callback_cannot_change_other_driver_ticket(self, call):

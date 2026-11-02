@@ -1,5 +1,3 @@
-from datetime import timedelta
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -8,8 +6,7 @@ from django.utils import timezone
 
 from .locations import LocationError, SafeRedirects, checked_url, coordinates_from_url, parse_location
 from .models import TelegramAccount, Ticket, Vehicle
-from .serializers import TicketSerializer
-from .telegram import TICKET_STEPS, handle_update
+from .telegram import TICKET_FLOW_VERSION, TICKET_STEPS, handle_update
 
 
 class LocationParserTests(SimpleTestCase):
@@ -68,6 +65,7 @@ class LocationParserTests(SimpleTestCase):
             parse_location("https://maps.app.goo.gl/example")
 
 
+@patch("driver_notifications.telegram.reverse_place", side_effect=lambda lat, lon: {"name": "Toshkent" if lat > 40.5 else "Samarqand", "address": f"Address {lat}, {lon}", "geocoded": True})
 @patch("driver_notifications.telegram.call", return_value={"message_id": 1})
 class BotLocationTests(TestCase):
     def setUp(self):
@@ -86,98 +84,193 @@ class BotLocationTests(TestCase):
         handle_update({"message": message})
         self.account.refresh_from_db()
 
+    def tap(self, action):
+        self.account.refresh_from_db()
+        payload = next(v for v in self.account.ui["actions"].values() if v == action or v.endswith(":" + action))
+        handle_update({"callback_query": {"id": "q", "from": {"id": 123}, "data": payload, "message": {"chat": {"id": 123, "type": "private"}, "message_id": 1}}})
+        self.account.refresh_from_db()
+
     def start_at(self, key, data=None):
-        self.account.state = {"flow": "ticket", "index": TICKET_STEPS.index(key), "data": data or {}}
+        self.account.state = {"flow": "ticket", "version": TICKET_FLOW_VERSION, "index": TICKET_STEPS.index(key), "data": data or {}}
         self.account.save()
 
-    def test_current_location_accepts_map_link(self, call):
-        self.start_at("current_location")
-        self.send("https://yandex.ru/maps/?whatshere%5Bpoint%5D=69.2,41.3")
-        self.assertEqual(self.account.state["data"]["current_location"]["lat"], 41.3)
-        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("origins"))
-
-    def test_collect_multiple_locations_and_skip_coordinate_prompt(self, call):
-        self.start_at("origins")
-        self.send(location={"latitude": 41.3, "longitude": 69.2})
-        self.assertIn("pending_place", self.account.state)
-        self.send("Toshkent")
-        self.send("Chirchiq https://www.google.com/maps/search/?api=1&query=41.47,69.58")
-        self.assertEqual(len(self.account.state["data"]["origins"]), 2)
-        self.send("Tayyor")
-        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("origin_radius"))
-        self.assertNotIn("pending_place", self.account.state)
-        self.assertEqual(self.account.state["data"]["origins"][1]["lon"], 69.58)
-
-    def test_named_cities_receive_points_one_by_one_and_skip(self, call):
-        self.start_at("origins")
-        self.send("Toshkent, Chirchiq")
-        self.send(location={"latitude": 41.3, "longitude": 69.2})
-        self.assertEqual(self.account.state["point_index"], 1)
-        self.assertIn("Chirchiq", call.call_args.kwargs["text"])
-        self.send("O‘tkazib yuborish")
-        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("origin_radius"))
-        self.assertIn("lat", self.account.state["data"]["origins"][0])
-        self.assertNotIn("lat", self.account.state["data"]["origins"][1])
-
-    def test_mixed_collected_places_target_correct_missing_point(self, call):
-        self.start_at("destinations")
-        self.send("Toshkent https://yandex.ru/maps/?ll=69.2,41.3")
-        self.send("Chirchiq")
-        self.send("Tayyor")
-        self.assertEqual(self.account.state["point_index"], 1)
-        self.send("https://www.google.com/maps/search/?api=1&query=41.47,69.58")
-        places = self.account.state["data"]["destinations"]
-        self.assertEqual(places[0]["lat"], 41.3)
-        self.assertEqual(places[1]["lat"], 41.47)
-        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("prices"))
-
-    def test_map_source_and_coordinates_saved_to_ticket(self, call):
-        link = "https://www.google.com/maps/search/?api=1&query=41.3,69.2"
-        from .locations import parse_location
-        place = parse_location("Toshkent " + link)
-        data = {"title": "Xarita", "vehicle": self.vehicle.pk, "origins": [place], "destinations": [{"name": "Samarqand"}], "ready_at": timezone.now().isoformat(), "expires_at": (timezone.now()+timedelta(days=1)).isoformat(), "available_tons": "20", "min_price": "0"}
-        serializer = TicketSerializer(data=data, context={"request": SimpleNamespace(user=self.driver)})
-        serializer.is_valid(raise_exception=True)
-        ticket = serializer.save(owner=self.driver)
-        self.assertEqual(ticket.origins[0]["source_url"], link)
-        self.assertEqual(ticket.origins[0]["lat"], 41.3)
-
-    def test_invalid_link_keeps_step(self, call):
-        self.start_at("destination_points", {"destinations": [{"name": "Toshkent"}]})
-        self.send("https://localhost/maps")
-        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("destination_points"))
-        self.assertNotIn("lat", self.account.state["data"]["destinations"][0])
-        self.assertIn("Telegram", call.call_args.kwargs["text"])
-
-    def test_back_and_cancel_clear_pending_location(self, call):
-        self.start_at("waypoints")
-        self.send(location={"latitude": 41.3, "longitude": 69.2})
-        self.send("/back")
-        self.assertNotIn("pending_place", self.account.state)
-        self.send("/cancel")
-        self.assertEqual(self.account.state, {})
-
-    def test_complete_ticket_wizard_with_telegram_and_map_locations(self, call):
+    def begin(self):
         for text in ("/ticket", "Xaritadan tiket", str(self.vehicle.pk)):
             self.send(text)
+
+    def test_multiple_locations_resolve_names_without_city_question(self, call, reverse):
+        self.begin()
         self.send(location={"latitude": 41.3, "longitude": 69.2})
-        self.send(location={"latitude": 41.31, "longitude": 69.21})
-        self.send("Toshkent")
-        self.send("Tayyor")
-        self.send("25")
-        self.send("alternatives")
-        self.send("Samarqand https://yandex.ru/maps/?whatshere%5Bpoint%5D=66.96,39.65")
-        self.send("Tayyor")
-        for text in ("2000000", "2", "1", "30", "-", "168", "20", "yoq", "UZS", "trip", "2000000", "any_two"):
-            self.send(text)
-        self.send("Jizzax https://www.google.com/maps/search/?api=1&query=40.12,67.84")
-        self.send("Tayyor")
-        self.send("-")
-        self.send("ha")
+        self.assertNotIn("pending_place", self.account.state)
+        self.assertEqual(self.account.state["data"]["origins"][0]["name"], "Toshkent")
+        markup = next(c.kwargs["reply_markup"] for c in reversed(call.call_args_list) if c.args[0] == "sendMessage")
+        self.assertIn("inline_keyboard", markup)
+        self.tap("add_place")
+        self.send("https://www.google.com/maps/search/?api=1&query=41.47,69.58")
+        self.tap("done")
+        self.send("https://yandex.ru/maps/?whatshere%5Bpoint%5D=66.96,39.65")
+        self.tap("add_place")
+        self.send(location={"latitude": 39.7, "longitude": 66.9})
+        self.assertFalse(Ticket.objects.exists())
+        self.tap("done")
         self.assertEqual(self.account.state, {})
-        ticket = Ticket.objects.get(title="Xaritadan tiket")
-        self.assertEqual(ticket.current_location["lat"], 41.3)
-        self.assertEqual(ticket.origins[0]["name"], "Toshkent")
-        self.assertEqual(ticket.origins[0]["lat"], 41.31)
+        ticket = Ticket.objects.get()
+        self.assertEqual(len(ticket.origins), 2)
+        self.assertEqual(len(ticket.destinations), 2)
+        self.assertEqual(ticket.origins[1]["source_url"], "https://www.google.com/maps/search/?api=1&query=41.47,69.58")
+        self.assertEqual(ticket.destinations[0]["name"], "Samarqand")
         self.assertEqual(ticket.destinations[0]["lon"], 66.96)
-        self.assertEqual(ticket.waypoints[0]["lat"], 40.12)
+        self.assertIn("address", ticket.destinations[0])
+        self.assertEqual(ticket.available_tons, self.vehicle.capacity_tons)
+        self.assertEqual(ticket.match_mode, "route")
+        self.assertEqual(ticket.min_price, 0)
+        self.assertLess(abs((ticket.expires_at - ticket.ready_at).total_seconds() - 7*86400), 1)
+
+    def test_anywhere_saves_immediately_without_extra_steps(self, call, reverse):
+        self.begin()
+        self.send(venue={"title": "Ombor", "location": {"latitude": 41.3, "longitude": 69.2}})
+        self.tap("done")
+        self.tap("anywhere")
+        self.assertEqual(self.account.state, {})
+        ticket = Ticket.objects.get()
+        self.assertEqual(ticket.route_mode, "anywhere")
+        self.assertEqual(ticket.destinations, [])
+        self.assertEqual(ticket.origins[0]["name"], "Toshkent")
+
+    def test_repeated_save_callback_does_not_create_a_second_ticket(self, call, reverse):
+        self.begin()
+        self.send(location={"latitude": 41.3, "longitude": 69.2})
+        self.tap("done")
+        payload = next(v for v in self.account.ui["actions"].values() if v.endswith(":anywhere"))
+        for _ in range(2):
+            handle_update({"callback_query": {"id": "q", "from": {"id": 123}, "data": payload, "message": {"chat": {"id": 123, "type": "private"}, "message_id": 1}}})
+        self.assertEqual(Ticket.objects.count(), 1)
+
+    def test_geocoder_failure_keeps_location_step_and_does_not_save_gps(self, call, reverse):
+        reverse.side_effect = LocationError("geocoding")
+        self.begin()
+        self.send(location={"latitude": 41.3, "longitude": 69.2})
+        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("origins"))
+        self.assertFalse(self.account.state["data"].get("origins"))
+        self.assertFalse(Ticket.objects.exists())
+        self.assertNotIn("pending_place", self.account.state)
+
+    def test_repeated_location_is_not_duplicated_and_limit_is_enforced(self, call, reverse):
+        self.begin()
+        for _ in range(2):
+            self.send(location={"latitude": 41.3, "longitude": 69.2})
+        self.assertEqual(len(self.account.state["data"]["origins"]), 1)
+        for i in range(1, 11):
+            self.send(location={"latitude": 41.3+i/100, "longitude": 69.2})
+        self.assertEqual(len(self.account.state["data"]["origins"]), 10)
+
+    def test_invalid_link_and_empty_origin_cannot_advance(self, call, reverse):
+        self.begin()
+        for text in ("done", "anywhere", "Toshkent", "https://localhost/maps"):
+            self.send(text)
+        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("origins"))
+        self.assertFalse(Ticket.objects.exists())
+        reverse.assert_not_called()
+
+    def test_only_own_vehicle_can_be_selected(self, call, reverse):
+        other = get_user_model().objects.create_user(username="other_driver", role="driver")
+        vehicle = Vehicle.objects.create(owner=other, name="Other", kind="tent", capacity_tons=20)
+        self.send("/ticket")
+        self.send("Test")
+        self.send(str(vehicle.pk))
+        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("vehicle"))
+        self.assertNotIn("vehicle", self.account.state["data"])
+
+    def test_new_vehicle_returns_to_ticket_without_losing_title(self, call, reverse):
+        self.send("/ticket")
+        self.send("Test")
+        self.tap("nav:vehicle")
+        for text in ("Isuzu", "van", "5", "-", "-", "ha"):
+            self.send(text)
+        self.assertEqual(self.account.state["flow"], "ticket")
+        self.assertEqual(self.account.state["data"]["title"], "Test")
+        self.assertEqual(self.account.state["index"], TICKET_STEPS.index("origins"))
+        self.assertEqual(Vehicle.objects.get(pk=self.account.state["data"]["vehicle"]).name, "Isuzu")
+
+    def test_old_flow_state_restarts_safely_after_deploy(self, call, reverse):
+        self.account.state = {"flow": "ticket", "index": 20, "data": {"title": "Old"}}
+        self.account.save()
+        self.send("hello")
+        self.assertEqual(self.account.state["version"], TICKET_FLOW_VERSION)
+        self.assertEqual(self.account.state["index"], 0)
+
+    def test_multiple_pickups_and_destinations_match_all_chosen_combinations(self, call, reverse):
+        from cargo.models import Load
+        from .matching import evaluate
+
+        reverse.side_effect = lambda lat, lon: {"name": {41.3: "Toshkent", 41.47: "Chirchiq", 39.65: "Samarqand", 39.77: "Buxoro"}[lat], "geocoded": True}
+        self.begin()
+        for lat in (41.3, 41.47):
+            self.send(location={"latitude": lat, "longitude": 69.2})
+        self.tap("done")
+        for lat in (39.65, 39.77):
+            self.send(location={"latitude": lat, "longitude": 66.9})
+        self.tap("done")
+        ticket = Ticket.objects.get()
+        sender = get_user_model().objects.create_user(username="multi_shipper")
+        load = Load(posted_by=sender, cargo_name="Yuk", vehicle_type="Tent", weight_tons=10)
+        for origin in ("Toshkent", "Chirchiq"):
+            for destination in ("Samarqand", "Buxoro"):
+                load.origin, load.destination = origin, destination
+                self.assertTrue(evaluate(ticket, load)["checks"]["route"])
+        load.destination = "Namangan"
+        self.assertIsNone(evaluate(ticket, load))
+
+    def test_anywhere_still_requires_a_chosen_pickup(self, call, reverse):
+        from cargo.models import Load
+        from .matching import evaluate
+
+        self.begin()
+        self.send(location={"latitude": 41.3, "longitude": 69.2})
+        self.tap("done")
+        self.tap("anywhere")
+        ticket = Ticket.objects.get()
+        sender = get_user_model().objects.create_user(username="anywhere_shipper")
+        load = Load(posted_by=sender, origin="Tashkent", destination="Nukus", cargo_name="Yuk", vehicle_type="Tent", weight_tons=10)
+        self.assertIsNotNone(evaluate(ticket, load))
+        load.origin = "Buxoro"
+        self.assertIsNone(evaluate(ticket, load))
+
+    def test_bot_ticket_matches_on_site_and_delivers_in_telegram(self, call, reverse):
+        from cargo.models import Load
+        from rest_framework.test import APIClient
+        from .delivery import deliver
+        from .models import Notification
+        from .service import scan_ticket
+        from .matching import evaluate
+
+        sender = get_user_model().objects.create_user(username="shipper", role="dispatcher")
+        matching = Load.objects.create(posted_by=sender, origin="Ташкент", destination="Самарканд", cargo_name="Sement", vehicle_type="Tent", weight_tons=10, contact_phone="998901234567")
+        wrong_route = Load.objects.create(posted_by=sender, origin="Nukus", destination="Самарканд", cargo_name="Sement", vehicle_type="Tent", weight_tons=10, contact_phone="998901234567")
+        wrong_vehicle = Load.objects.create(posted_by=sender, origin="Ташкент", destination="Самарканд", cargo_name="Sement", vehicle_type="Refrigerator", weight_tons=10, contact_phone="998901234567")
+        overweight = Load.objects.create(posted_by=sender, origin="Ташкент", destination="Самарканд", cargo_name="Sement", vehicle_type="Tent", weight_tons=25, contact_phone="998901234567")
+        self.begin()
+        self.send(location={"latitude": 41.3, "longitude": 69.2})
+        self.tap("done")
+        self.send(location={"latitude": 39.65, "longitude": 66.96})
+        self.tap("done")
+        ticket = Ticket.objects.get()
+        self.assertIsNotNone(evaluate(ticket, matching))
+        for load in (wrong_route, wrong_vehicle, overweight):
+            self.assertIsNone(evaluate(ticket, load))
+        note = Notification.objects.get(kind="match")
+        self.assertEqual(note.load_id, matching.pk)
+        self.assertLessEqual(note.deliver_after, timezone.now())
+        client = APIClient()
+        client.force_authenticate(self.driver)
+        self.assertEqual(client.get("/api/driver/tickets/").data[0]["id"], ticket.pk)
+        self.assertEqual(client.get("/api/driver/notifications/unread/").data["count"], 2)
+        with patch("driver_notifications.delivery.call", return_value={"message_id": 44}) as send:
+            deliver()
+            deliver()
+        note.refresh_from_db()
+        self.assertIsNotNone(note.sent_at)
+        self.assertTrue(any("Ташкент" in c.kwargs.get("text", "") for c in send.call_args_list))
+        later = Load.objects.create(posted_by=sender, origin="Toshkent", destination="Samarqand", cargo_name="Yangi yuk", vehicle_type="Tent", weight_tons=5, contact_phone="998901234567", currency="USD", price_amount=100)
+        scan_ticket(ticket.pk)
+        self.assertTrue(Notification.objects.filter(kind="match", load=later).exists())
