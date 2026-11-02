@@ -13,9 +13,14 @@ The bot and website use the same Ticket and Notification records.
 
 All ticket, vehicle and notification controls use Telegram's persistent bottom reply
 keyboard (including Add address, Continue, Anywhere, Back, Cancel and Menu).
-Previous tracked bot prompts, driver replies and delivered notification messages are
-removed as the next message is displayed. Notification history stays on the website.
-Temporary cleanup failures are saved and retried without discarding the new prompt.
+Previous tracked bot prompts and driver replies are removed as the next step is displayed.
+Delivered freight notifications remain in Telegram across menu changes and future
+notifications. Only closing or deleting their own ticket queues those messages for
+removal. Cleanup IDs survive ticket deletion in the account UI JSON and are retried
+by the worker if Telegram is unavailable. Other tickets' notifications are preserved;
+legacy messages combining several tickets are edited to retain the remaining tickets.
+Site notification history remains until its ticket is deleted. Temporary ordinary-chat
+cleanup failures are retried without discarding the current prompt.
 Notification delivery waits while a driver is filling out a form, keeping the current
 question and keyboard visible. Pending notifications remain visible on the website.
 Telegram only allows bots to delete messages from the last 48 hours; older untracked

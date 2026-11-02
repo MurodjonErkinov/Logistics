@@ -58,6 +58,10 @@ def deliver():
 @transaction.atomic
 def deliver_account(account_id, now):
     account = TelegramAccount.objects.select_for_update(of=("self",)).select_related("owner").filter(pk=account_id, blocked=False, owner__role="driver", owner__is_active=True).first()
+    if account is not None:
+        from .ticket_cleanup import process_ticket_cleanup, queue_closed_ticket_cleanup
+        queue_closed_ticket_cleanup(account)
+        process_ticket_cleanup(account, send=call)
     # Keep the driver's current question/keyboard visible until the wizard ends.
     if account is None or account.state:
         return
@@ -65,16 +69,17 @@ def deliver_account(account_id, now):
     if not pref.telegram_enabled or quiet(pref, now):
         return
     pending = Notification.objects.filter(owner=account.owner, sent_at=None, obsolete=False, deliver_after__lte=now).select_related("ticket").order_by("created_at")
-    pending = pending.exclude(kind__in=["match", "price"], ticket__status__in=["paused", "closed", "expired"])
+    pending = pending.exclude(ticket__status="closed")
+    pending = pending.exclude(kind__in=["match", "price"], ticket__status__in=["paused", "expired"])
     first = pending.first()
     if first is None:
         return
     notes = [first]
     if first.level == "partial" and pref.partial_interval_minutes:
-        notes = list(pending.filter(level="partial", attempts=0, ticket__status="active")[:5]) or [first]
+        notes = list(pending.filter(ticket=first.ticket, level="partial", attempts=0, ticket__status="active")[:5]) or [first]
     try:
         text = "\n\n".join(render(note, pref.language) for note in notes)
-        result = send_ui(account, text, keyboard(notes), send=call, link_preview_options={"is_disabled": True})
+        result = send_ui(account, text, keyboard(notes), send=call, keep_message=True, link_preview_options={"is_disabled": True})
         Notification.objects.filter(pk__in=[n.pk for n in notes]).update(sent_at=now, message_id=result["message_id"], message_chat_id=account.chat_id, delivery_error="")
     except BotError as exc:
         for note in notes:

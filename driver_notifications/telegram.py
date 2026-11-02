@@ -69,6 +69,11 @@ def cleanup_messages(account, message_ids=(), send=None):
     locked = TelegramAccount.objects.select_for_update().get(pk=account.pk)
     current = locked.ui.get("message_id")
     ids = list(dict.fromkeys(i for i in [*locked.ui.get("cleanup_ids", []), *message_ids] if i and i != current))
+    # Ordinary chat cleanup must never delete delivered freight notifications.
+    protected = set(Notification.objects.filter(owner=locked.owner, message_chat_id=locked.chat_id, message_id__in=ids).values_list("message_id", flat=True))
+    protected.update(int(i) for i in locked.ui.get("notification_cleanup", {}))
+    protected.add(locked.ui.get("notification_message_id"))
+    ids = [i for i in ids if i not in protected]
     batch, remaining = ids[:100], ids[100:]
     cleared = []
     if len(batch) > 2:
@@ -97,7 +102,7 @@ def cleanup_messages(account, message_ids=(), send=None):
 
 
 @transaction.atomic
-def send_ui(account, text, markup, send=None, **kwargs):
+def send_ui(account, text, markup, send=None, keep_message=False, **kwargs):
     send = send or call
     locked = TelegramAccount.objects.select_for_update().get(pk=account.pk)
     pref, _ = Preference.objects.get_or_create(owner=locked.owner)
@@ -117,10 +122,11 @@ def send_ui(account, text, markup, send=None, **kwargs):
     result = send("sendMessage", chat_id=locked.chat_id, text=text[:4000],
                   reply_markup={"keyboard": rows, "resize_keyboard": True, "is_persistent": True, "one_time_keyboard": False}, **kwargs)
     previous = locked.ui.get("message_id")
-    old_notifications = list(Notification.objects.filter(owner=locked.owner, message_chat_id=locked.chat_id).exclude(message_id=None).values_list("message_id", flat=True).distinct()[:100])
-    locked.ui = {"message_id": result["message_id"], "actions": actions, "cleanup_ids": locked.ui.get("cleanup_ids", [])}
+    locked.ui = {**locked.ui, "message_id": None if keep_message else result["message_id"], "actions": actions}
+    if keep_message:
+        locked.ui["notification_message_id"] = result["message_id"]
     locked.save(update_fields=["ui"])
-    cleanup_messages(locked, [previous, *old_notifications], send=send)
+    cleanup_messages(locked, [previous], send=send)
     account.ui = locked.ui
     return result
 

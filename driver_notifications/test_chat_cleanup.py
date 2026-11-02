@@ -45,13 +45,13 @@ class CleanChatTests(TestCase):
         self.assertIn(102, self.deleted(call))
 
     @patch("driver_notifications.telegram.call", return_value={"message_id": 101})
-    def test_known_notifications_are_cleaned_without_removing_site_history(self, call):
+    def test_notifications_survive_regular_chat_cleanup(self, call):
         old = self.note("old", sent_at=timezone.now(), message_id=80, message_chat_id=123)
         say(self.account, "Yangi savol")
-        self.assertIn(80, self.deleted(call))
+        self.assertNotIn(80, self.deleted(call))
         self.assertNotIn(101, self.deleted(call))
         old.refresh_from_db()
-        self.assertIsNone(old.message_id)
+        self.assertEqual(old.message_id, 80)
         self.assertIsNotNone(old.sent_at)
         self.assertTrue(Notification.objects.filter(pk=old.pk).exists())
 
@@ -101,7 +101,7 @@ class CleanChatTests(TestCase):
         self.assertIsNotNone(note.sent_at)
 
     @patch("driver_notifications.delivery.call")
-    def test_new_notification_replaces_previous_telegram_notification(self, call):
+    def test_new_notification_keeps_previous_telegram_notification(self, call):
         def api(method, **kwargs):
             if method == "sendMessage":
                 return {"message_id": 110 + sum(c.args[0] == "sendMessage" for c in call.call_args_list)}
@@ -114,12 +114,13 @@ class CleanChatTests(TestCase):
         first.refresh_from_db()
         previous = first.message_id
         deliver()
-        self.assertIn(previous, self.deleted(call))
+        self.assertNotIn(previous, self.deleted(call))
         first.refresh_from_db()
         second.refresh_from_db()
         self.account.refresh_from_db()
-        self.assertIsNone(first.message_id)
-        self.assertEqual(second.message_id, self.account.ui["message_id"])
+        self.assertEqual(first.message_id, previous)
+        self.assertEqual(second.message_id, self.account.ui["notification_message_id"])
+        self.assertIsNone(self.account.ui["message_id"])
         self.assertEqual(Notification.objects.filter(sent_at__isnull=False).count(), 2)
 
     @patch("driver_notifications.telegram.call", return_value={"message_id": 101})
