@@ -249,8 +249,10 @@ class RegistrationVerificationTests(TestCase):
             sent = [c for c in delivery.call_args_list if c.args[0] == "sendMessage"]
             self.assertEqual(len(sent), 2)
             self.assertTrue(all(c.kwargs["chat_id"] == 123 for c in sent))
+            # Delivery may also delete the previous tracked bot message.
+            completed_calls = len(delivery.call_args_list)
             deliver()
-            self.assertEqual(len(delivery.call_args_list), 2)
+            self.assertEqual(len(delivery.call_args_list), completed_calls)
         self.assertIsNotNone(Notification.objects.get(owner=user, load=load, kind="match").sent_at)
         TelegramAccount.objects.filter(owner=user).update(blocked=True)
         self.message(text=f"/start reg_{self.account['verification_id'].replace('-', '')}")

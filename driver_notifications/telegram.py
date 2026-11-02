@@ -62,30 +62,73 @@ def delete_message(chat_id, message_id):
             raise
 
 
-def say(account, uz, ru=None, **kwargs):
-    pref, _ = Preference.objects.get_or_create(owner=account.owner)
-    markup = kwargs.pop("reply_markup", inline_keyboard(account, pref.language == "ru"))
+@transaction.atomic
+def cleanup_messages(account, message_ids=(), send=None):
+    """Retry known old messages without losing a newly sent prompt on failure."""
+    send = send or call
+    locked = TelegramAccount.objects.select_for_update().get(pk=account.pk)
+    current = locked.ui.get("message_id")
+    ids = list(dict.fromkeys(i for i in [*locked.ui.get("cleanup_ids", []), *message_ids] if i and i != current))
+    batch, remaining = ids[:100], ids[100:]
+    cleared = []
+    if len(batch) > 2:
+        try:
+            send("deleteMessages", chat_id=locked.chat_id, message_ids=batch)
+            cleared, batch = batch, []
+        except BotError as exc:
+            if exc.code != 400:
+                remaining = batch + remaining
+                batch = []
+    for index, message_id in enumerate(batch):
+        try:
+            send("deleteMessage", chat_id=locked.chat_id, message_id=message_id)
+            cleared.append(message_id)
+        except BotError as exc:
+            if exc.code in (400, 403):
+                cleared.append(message_id)
+            else:
+                remaining = batch[index:] + remaining
+                break
+    if cleared:
+        Notification.objects.filter(owner=locked.owner, message_chat_id=locked.chat_id, message_id__in=cleared).update(message_id=None, message_chat_id=None)
+    locked.ui["cleanup_ids"] = remaining
+    locked.save(update_fields=["ui"])
+    account.ui = locked.ui
+
+
+@transaction.atomic
+def send_ui(account, text, markup, send=None, **kwargs):
+    send = send or call
+    locked = TelegramAccount.objects.select_for_update().get(pk=account.pk)
+    pref, _ = Preference.objects.get_or_create(owner=locked.owner)
     rows = []
     actions = {b["text"]: b["callback_data"] for row in menu_rows(pref.language == "ru") for b in row}
-    ticket_flow = account.state.get("flow") == "ticket"
     for row in markup.get("inline_keyboard", []):
         buttons = []
         for button in row:
-            if "callback_data" in button:
+            action = button.get("callback_data")
+            if "url" in button:
+                action = "open_url:" + button["url"]
+            if action:
                 buttons.append({"text": button["text"]})
-                actions[button["text"]] = button["callback_data"]
+                actions[button["text"]] = action
         if buttons:
             rows.append(buttons)
-    reply_markup = markup if ticket_flow else {"keyboard": rows, "resize_keyboard": True, "is_persistent": True}
-    result = call("sendMessage", chat_id=account.chat_id,
-                  text=(ru if ru and pref.language == "ru" else uz)[:4000],
-                  reply_markup=reply_markup, **kwargs)
-    previous = account.ui.get("message_id")
-    account.ui = {"message_id": result["message_id"], "actions": actions}
-    account.save(update_fields=["ui"])
-    if previous != result["message_id"]:
-        delete_message(account.chat_id, previous)
+    result = send("sendMessage", chat_id=locked.chat_id, text=text[:4000],
+                  reply_markup={"keyboard": rows, "resize_keyboard": True, "is_persistent": True, "one_time_keyboard": False}, **kwargs)
+    previous = locked.ui.get("message_id")
+    old_notifications = list(Notification.objects.filter(owner=locked.owner, message_chat_id=locked.chat_id).exclude(message_id=None).values_list("message_id", flat=True).distinct()[:100])
+    locked.ui = {"message_id": result["message_id"], "actions": actions, "cleanup_ids": locked.ui.get("cleanup_ids", [])}
+    locked.save(update_fields=["ui"])
+    cleanup_messages(locked, [previous, *old_notifications], send=send)
+    account.ui = locked.ui
     return result
+
+
+def say(account, uz, ru=None, **kwargs):
+    pref, _ = Preference.objects.get_or_create(owner=account.owner)
+    markup = kwargs.pop("reply_markup", inline_keyboard(account, pref.language == "ru"))
+    return send_ui(account, ru if ru and pref.language == "ru" else uz, markup, **kwargs)
 
 
 TICKET_STEPS = ["title", "vehicle", "origins", "destinations"]
@@ -200,6 +243,7 @@ def inline_keyboard(account, ru=False):
             if key == "destinations":
                 rows.append([button("anywhere", "🌍 Любое направление" if ru else "🌍 Istalgan manzil")])
         rows.append([button("/back", "⬅️ Назад" if ru else "⬅️ Orqaga"), button("/cancel", "✖️ Отмена" if ru else "✖️ Bekor qilish")])
+        rows.append([{"text": "🏠 Меню" if ru else "🏠 Menyu", "callback_data": "nav:menu"}])
         return {"inline_keyboard": rows}
     choices = {"kind": ["tent", "van", "refrigerator", "isothermal", "flatbed", "tanker", "dump", "lowbed", "container", "other"], "partial_interval_minutes": ["0", "15", "30", "60"], "language": ["uz", "ru"]}
     if key == "confirm":
@@ -357,7 +401,12 @@ def ticket_answer(account, key, text, message):
 def callback(account, query):
     if query.get("id"):
         call("answerCallbackQuery", callback_query_id=query["id"])
-    parts = query.get("data", "").split(":")
+    payload = query.get("data", "")
+    if payload.startswith("open_url:"):
+        if payload in account.ui.get("actions", {}).values():
+            return say(account, payload.removeprefix("open_url:"), link_preview_options={"is_disabled": True})
+        return
+    parts = payload.split(":")
     if len(parts) != 2 or not parts[1].isdigit():
         return
     action, pk = parts[0], int(parts[1])
@@ -391,6 +440,7 @@ def callback(account, query):
             say(account, "Bu yuk uchun xabarlar o‘chirildi.", "Уведомления об этом грузе отключены.")
 
 
+@transaction.atomic
 def handle_update(update):
     query = update.get("callback_query")
     message = query.get("message", {}) if query else update.get("message", {})
@@ -415,7 +465,7 @@ def handle_update(update):
     text = message.get("text", "").strip()[:4000]
     if not query and text.startswith("/start "):
         text = "/start"
-    account = TelegramAccount.objects.select_related("owner").filter(chat_id=chat_id, owner__is_active=True).first()
+    account = TelegramAccount.objects.select_for_update(of=("self",)).select_related("owner").filter(chat_id=chat_id, owner__is_active=True).first()
     if not account:
         if query:
             call("answerCallbackQuery", callback_query_id=query["id"])
@@ -430,6 +480,8 @@ def handle_update(update):
         account.ui = {"message_id": result["message_id"], "actions": {}}
         account.save(update_fields=["ui"])
         return
+    if message.get("message_id"):
+        cleanup_messages(account, [message["message_id"]])
     if account.state.get("flow") == "ticket" and account.state.get("version") != TICKET_FLOW_VERSION:
         account.state = ticket_state()
         account.save(update_fields=["state"])
@@ -437,7 +489,6 @@ def handle_update(update):
             call("answerCallbackQuery", callback_query_id=query["id"])
         return prompt(account)
     if not query:
-        delete_message(chat_id, message.get("message_id"))
         payload = None if update.get("_resolved") else account.ui.get("actions", {}).get(text)
         if payload:
             return handle_update({"callback_query": {

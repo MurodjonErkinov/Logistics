@@ -86,9 +86,8 @@ class BotLocationTests(TestCase):
 
     def tap(self, action):
         self.account.refresh_from_db()
-        payload = next(v for v in self.account.ui["actions"].values() if v == action or v.endswith(":" + action))
-        handle_update({"callback_query": {"id": "q", "from": {"id": 123}, "data": payload, "message": {"chat": {"id": 123, "type": "private"}, "message_id": 1}}})
-        self.account.refresh_from_db()
+        text = next(k for k, v in self.account.ui["actions"].items() if v == action or v.endswith(":" + action))
+        self.send(text)
 
     def start_at(self, key, data=None):
         self.account.state = {"flow": "ticket", "version": TICKET_FLOW_VERSION, "index": TICKET_STEPS.index(key), "data": data or {}}
@@ -104,7 +103,8 @@ class BotLocationTests(TestCase):
         self.assertNotIn("pending_place", self.account.state)
         self.assertEqual(self.account.state["data"]["origins"][0]["name"], "Toshkent")
         markup = next(c.kwargs["reply_markup"] for c in reversed(call.call_args_list) if c.args[0] == "sendMessage")
-        self.assertIn("inline_keyboard", markup)
+        self.assertIn("keyboard", markup)
+        self.assertNotIn("inline_keyboard", markup)
         self.tap("add_place")
         self.send("https://www.google.com/maps/search/?api=1&query=41.47,69.58")
         self.tap("done")

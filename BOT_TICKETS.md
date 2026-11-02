@@ -11,9 +11,15 @@ The bot and website use the same Ticket and Notification records.
 4. Send one or more destination locations/links (up to 10) and tap **✅ Tiketni ochish**.
    Alternatively, **🌍 Istalgan manzil** creates the ticket immediately without a destination.
 
-These controls are actual inline buttons beneath the current message. The main menu
-uses Telegram's persistent bottom keyboard. Previous bot prompts and driver messages
-are removed by the existing chat cleanup behavior.
+All ticket, vehicle and notification controls use Telegram's persistent bottom reply
+keyboard (including Add address, Continue, Anywhere, Back, Cancel and Menu).
+Previous tracked bot prompts, driver replies and delivered notification messages are
+removed as the next message is displayed. Notification history stays on the website.
+Temporary cleanup failures are saved and retried without discarding the new prompt.
+Notification delivery waits while a driver is filling out a form, keeping the current
+question and keyboard visible. Pending notifications remain visible on the website.
+Telegram only allows bots to delete messages from the last 48 hours; older untracked
+messages may need to be cleared manually in the Telegram client.
 
 The bot automatically sets readiness to now, expiry to 7 days, capacity to the selected
 vehicle's full capacity, no minimum price, and route-based matching. It asks no questions

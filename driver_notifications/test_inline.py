@@ -8,7 +8,7 @@ from .telegram import TICKET_FLOW_VERSION, TICKET_STEPS, VEHICLE_STEPS, handle_u
 
 
 @patch("driver_notifications.telegram.call", return_value={"message_id": 1})
-class InlineBotTests(TestCase):
+class ReplyKeyboardBotTests(TestCase):
     def setUp(self):
         self.driver = get_user_model().objects.create_user(username="inline_driver", role="driver")
         self.account = TelegramAccount.objects.create(owner=self.driver, chat_id=123)
@@ -76,18 +76,18 @@ class InlineBotTests(TestCase):
         self.tap(self.payload(call, f":{vehicle.pk}"))
         self.assertEqual(self.account.state["data"]["vehicle"], vehicle.pk)
 
-    def test_ticket_back_and_cancel_are_inline(self, call):
+    def test_ticket_back_and_cancel_use_bottom_keyboard(self, call):
         self.account.state = {"flow": "ticket", "version": TICKET_FLOW_VERSION, "index": TICKET_STEPS.index("origins"), "data": {}}
         self.account.save()
         prompt(self.account)
         self.account.refresh_from_db()
-        self.assertIn("inline_keyboard", self.sent(call).kwargs["reply_markup"])
+        self.assertIn("keyboard", self.sent(call).kwargs["reply_markup"])
         self.tap(self.payload(call, ":/back"))
         self.assertEqual(self.account.state["index"], TICKET_STEPS.index("vehicle"))
         self.tap(self.payload(call, ":/cancel"))
         self.assertEqual(self.account.state, {})
 
-    def test_all_steps_and_pending_place_have_inline_controls(self, call):
+    def test_all_ticket_and_vehicle_steps_use_persistent_bottom_keyboard(self, call):
         Vehicle.objects.create(owner=self.driver, name="Tent", kind="tent", capacity_tons=20)
         for flow, steps in (("ticket", TICKET_STEPS), ("vehicle", VEHICLE_STEPS)):
             for i, key in enumerate(steps):
@@ -96,13 +96,13 @@ class InlineBotTests(TestCase):
                     self.account.save()
                     prompt(self.account)
                     markup = self.sent(call).kwargs["reply_markup"]
-                    if flow == "ticket":
-                        self.assertIn("inline_keyboard", markup)
-                        self.assertNotIn("keyboard", markup)
-                    else:
-                        self.assertIn("keyboard", markup)
-                        self.assertTrue(markup["resize_keyboard"])
-                        self.assertTrue(markup["is_persistent"])
+                    self.assertIn("keyboard", markup)
+                    self.assertNotIn("inline_keyboard", markup)
+                    self.assertTrue(markup["resize_keyboard"])
+                    self.assertTrue(markup["is_persistent"])
+                    self.assertFalse(markup["one_time_keyboard"])
+                    buttons = [b["text"] for row in markup["keyboard"] for b in row]
+                    self.assertIn("🏠 Menyu", buttons)
 
     def test_russian_choices_are_inline(self, call):
         Preference.objects.create(owner=self.driver, language="ru")
