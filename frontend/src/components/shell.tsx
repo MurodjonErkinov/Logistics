@@ -52,8 +52,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ? [
           {
             href: user.role === "driver" ? "/driver" : "/dashboard",
-            label:
-              user.role === "driver" ? "Haydovchi kabineti" : "Ish kabineti",
+            label: user.role === "driver" ? "Mening yuklarim" : "Ish kabineti",
             icon: Truck,
           },
         ]

@@ -10,14 +10,27 @@ from .models import MatchState, Notification, Preference, TelegramAccount, Ticke
 
 
 def snapshot(load):
-    return {"load_id": load.pk, "origin": load.origin, "destination": load.destination, "cargo_name": load.cargo_name, "phone": load.contact_phone, "price": str(load.price_amount) if load.price_amount is not None else None, "currency": load.currency, "price_basis": load.price_basis, "weight_tons": str(load.weight_tons), "vehicle_type": load.vehicle_type}
+    entry = getattr(load, "telegram_entry", None)
+    return {
+        "load_id": load.pk, "origin": load.origin, "destination": load.destination,
+        "origin_lat": str(load.origin_lat) if load.origin_lat is not None else None,
+        "origin_lon": str(load.origin_lon) if load.origin_lon is not None else None,
+        "destination_lat": str(load.destination_lat) if load.destination_lat is not None else None,
+        "destination_lon": str(load.destination_lon) if load.destination_lon is not None else None,
+        "cargo_name": load.cargo_name, "phone": load.contact_phone,
+        "alternate_phone": load.alternate_phone, "price": str(load.price_amount) if load.price_amount is not None else None,
+        "is_price_negotiable": load.is_price_negotiable, "currency": load.currency, "price_basis": load.price_basis,
+        "weight_tons": str(load.weight_tons), "vehicle_type": load.vehicle_type,
+        "pickup_date": load.pickup_date.isoformat() if load.pickup_date else None,
+        "notes": load.notes, "company": load.company.name if load.company_id else None,
+        "source_url": entry.post.source_url if entry else None,
+    }
 
 
 def notify(ticket, kind, key, load=None, result=None, data=None):
-    pref, _ = Preference.objects.get_or_create(owner=ticket.owner)
     result = result or {}
-    # Route-based searches already require the chosen route and capacity.
-    delay = pref.partial_interval_minutes if result.get("level") == "partial" and ticket.match_mode == "any_two" else 0
+    # Route matches are queued immediately, including partial matches.
+    delay = 0
     return Notification.objects.get_or_create(event_key=key, defaults={"owner": ticket.owner, "ticket": ticket, "load": load, "kind": kind, "level": result.get("level", ""), "snapshot": data or (snapshot(load) if load else {}), "reasons": result, "deliver_after": timezone.now() + timedelta(minutes=delay)})
 
 
@@ -37,7 +50,7 @@ def scan_ticket(ticket_id):
         return
     if ticket.expires_at - now <= timedelta(hours=2):
         notify(ticket, "expiring", f"reminder:{ticket.pk}:{ticket.expires_at.isoformat()}")
-    loads = Load.objects.filter(status="open").filter(Q(telegram_entry__expires_at__isnull=True) | Q(telegram_entry__expires_at__gt=now))
+    loads = Load.objects.select_related("company", "telegram_entry__post").filter(status="open").filter(Q(telegram_entry__expires_at__isnull=True) | Q(telegram_entry__expires_at__gt=now))
     available = set()
     for load in loads.iterator():
         available.add(load.pk)

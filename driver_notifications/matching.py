@@ -8,9 +8,15 @@ from django.utils import timezone
 
 
 def normalize(text):
-    text = re.sub(r"[^\w]+", " ", text.casefold()).strip()
+    text = text.casefold().translate(str.maketrans({"‘": "'", "’": "'", "ʻ": "'", "ʼ": "'", "`": "'"}))
+    text = re.sub(r"[\s']+", "", text)
+    text = re.sub(r"[^\w]+", "", text)
     aliases = {"ташкент": "toshkent", "tashkent": "toshkent", "самарканд": "samarqand", "samarkand": "samarqand", "бухара": "buxoro", "bukhara": "buxoro", "наманган": "namangan", "андижан": "andijon", "andijan": "andijon", "навои": "navoiy", "navoi": "navoiy", "фергана": "fargona", "farg ona": "fargona", "нукус": "nukus", "карши": "qarshi", "термез": "termiz", "ургенч": "urganch"}
     aliases.update({"fergana": "fargona", "karshi": "qarshi", "termez": "termiz", "urgench": "urganch", "jizzakh": "jizzax", "джизак": "jizzax", "gulistan": "guliston", "гулистан": "guliston", "kokand": "qoqon", "qo qon": "qoqon", "коканд": "qoqon"})
+    aliases.update({"chirchik": "chirchiq", "чирчик": "chirchiq", "angren": "angren", "ангрен": "angren", "olmaliq": "olmaliq", "almalyk": "olmaliq", "алмалык": "olmaliq", "margilan": "margilon", "маргилан": "margilon", "khiva": "xiva", "хива": "xiva", "shakhrisabz": "shahrisabz", "шахрисабз": "shahrisabz", "denau": "denov", "денау": "denov", "tashkentcity": "toshkent", "toshkentshahri": "toshkent", "ташкентгород": "toshkent", "samarkandcity": "samarqand", "samarqandshahri": "samarqand", "ferghanacity": "fargona", "ferghana": "fargona", "urganchcity": "urganch", "urgenchcity": "urganch"})
+    aliases.update({"навоий": "navoiy", "жиззах": "jizzax", "фергона": "fargona", "андижон": "andijon", "қарши": "qarshi", "термиз": "termiz", "бухоро": "buxoro", "нукус": "nukus", "qoʻqon": "qoqon", "кукон": "qoqon"})
+    aliases.update({"toshken": "toshkent", "tashken": "toshkent", "ташкен": "toshkent"})
+    aliases = {re.sub(r"[\s']+", "", key): re.sub(r"[\s']+", "", value) for key, value in aliases.items()}
     return aliases.get(text, text)
 
 
@@ -54,14 +60,10 @@ def evaluate(ticket, load):
     if load.posted_by_id == ticket.owner_id:
         return None
     capacity = load.weight_tons <= min(ticket.available_tons, ticket.vehicle.capacity_tons)
-    if not capacity and ticket.match_mode != "any_two":
-        return None
     origin = {"name": load.origin, "lat": load.origin_lat, "lon": load.origin_lon}
     destination = {"name": load.destination, "lat": load.destination_lat, "lon": load.destination_lon}
     vehicle = load.vehicle_kind or vehicle_kind(load.vehicle_type)
     checks = {"capacity": capacity, "vehicle": None if vehicle == "unknown" else ticket.vehicle.kind == vehicle}
-    if ticket.match_mode == "route" and checks["vehicle"] is False:
-        return None
     choices = sorted(ticket.destinations, key=lambda p: p.get("priority", 1))
     target = next((p for p in choices if place_matches(p, destination) is True), {})
     if ticket.route_mode == "ordered":
@@ -86,11 +88,8 @@ def evaluate(ticket, load):
         elif ticket.price_basis == "trip" and load.price_basis == "ton":
             amount = amount * load.weight_tons
     checks["price"] = True if threshold == 0 else None if amount is None else load.currency == ticket.currency and amount >= threshold
-    if ticket.match_mode != "any_two" and checks["route"] is not True:
+    if checks["route"] is not True:
         return None
     full = all(v is True for v in checks.values())
-    score = sum(checks[k] is True for k in ("route", "vehicle", "time", "price", "capacity"))
-    if ticket.match_mode == "full" and not full or score < 2:
-        return None
     km = distance(ticket.current_location, origin)
     return {"level": "full" if full else "partial", "checks": checks, "distance_km": round(km, 1) if km is not None else None, "priority": target.get("priority"), "distance_type": "straight_line"}

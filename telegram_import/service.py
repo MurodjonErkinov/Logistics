@@ -236,10 +236,14 @@ def delete_expired_loads():
             expires_at__lte=timezone.now(), load__isnull=False,
         ))
         load_ids = [entry.load_id for entry in entries]
-        _, counts = Load.objects.filter(pk__in=load_ids).delete()
+        retained = Load.objects.filter(pk__in=load_ids, claims__isnull=False)
+        retained_ids = list(retained.values_list("pk", flat=True).distinct())
+        retained.update(status=Load.Status.CLOSED)
+        _, counts = Load.objects.filter(pk__in=load_ids, claims__isnull=True).delete()
         TelegramLoad.objects.filter(pk__in=[entry.pk for entry in entries]).update(
             status=TelegramPost.Status.SKIPPED, detail="Deleted after 7 days", payload={},
         )
+        TelegramLoad.objects.filter(load_id__in=retained_ids).update(detail="Expired; retained in driver cabinet")
         return counts.get("cargo.Load", 0)
 
 

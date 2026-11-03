@@ -93,3 +93,13 @@ class Load(models.Model):
         if self.alternate_phone:
             lines.extend(("", f"📞 {self.alternate_phone}"))
         return "\n".join(lines)
+
+
+class LoadClaim(models.Model):
+    load = models.ForeignKey(Load, on_delete=models.CASCADE, related_name="claims")
+    driver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="load_claims")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("load", "driver"), name="unique_driver_load_claim")]
+        ordering = ("-created_at", "-id")

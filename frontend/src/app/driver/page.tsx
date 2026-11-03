@@ -1,4 +1,4 @@
-import { Workspace } from "@/components/workspace";
+import { DriverLoads } from "@/components/driver-loads";
 export default function Page() {
-  return <Workspace />;
+  return <DriverLoads />;
 }

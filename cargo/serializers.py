@@ -11,6 +11,9 @@ class LoadSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source="company.name", read_only=True)
     display_text = serializers.CharField(read_only=True)
     source_url = serializers.SerializerMethodField()
+    claim_count = serializers.IntegerField(read_only=True, default=0)
+    is_claimed = serializers.BooleanField(read_only=True, default=False)
+    claimed_at = serializers.DateTimeField(read_only=True, default=None)
 
     def get_source_url(self, obj):
         entry = getattr(obj, "telegram_entry", None)
@@ -35,7 +38,7 @@ class LoadSerializer(serializers.ModelSerializer):
             "is_price_negotiable", "price_amount", "price_basis", "currency", "contact_phone",
             "alternate_phone", "pickup_date", "notes", "status", "posted_by",
             "posted_by_username", "company", "company_name", "display_text", "source_url",
-            "created_at", "updated_at",
+            "created_at", "updated_at", "claim_count", "is_claimed", "claimed_at",
         )
         extra_kwargs = {"vehicle_type": {"required": False}}
         read_only_fields = (

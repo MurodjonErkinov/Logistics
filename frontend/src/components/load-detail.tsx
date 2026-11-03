@@ -25,6 +25,8 @@ import type { Company, Load } from "@/lib/types";
 import { useSession } from "./session";
 import { useSaved } from "./use-saved";
 import { Empty, ErrorBox, Loading } from "./ui";
+import { LoadClaim } from "./load-claim";
+import { LoadRouteMap } from "./load-route-map";
 
 export function LoadDetail({ id }: { id: string }) {
   const { t, locale } = useLocale();
@@ -46,6 +48,25 @@ export function LoadDetail({ id }: { id: string }) {
       api<Company[]>("partners/companies/?mine=1")
         .then(setCompanies)
         .catch(() => {});
+  }, [id, user?.id]);
+  useEffect(() => {
+    let active = true;
+    async function refresh() {
+      if (document.hidden) return;
+      try {
+        const latest = await api<Load>(`cargo/loads/${id}/`);
+        if (active) setLoad(latest);
+      } catch {
+        /* Keep the current details during a temporary network failure. */
+      }
+    }
+    const interval = window.setInterval(refresh, 20000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+    };
   }, [id, user?.id]);
   if (loading) return <Loading />;
   if (!load)
@@ -201,8 +222,12 @@ export function LoadDetail({ id }: { id: string }) {
               )}
             </div>
           </section>
+          <LoadRouteMap load={load} />
         </div>
         <aside>
+          {user?.role === "driver" && user.id !== load.posted_by && (
+            <LoadClaim load={load} />
+          )}
           <section className="contact-panel panel">
             <span className="eyebrow">{t("TASHISH NARXI")}</span>
             <h2>{t(price(load, locale))}</h2>

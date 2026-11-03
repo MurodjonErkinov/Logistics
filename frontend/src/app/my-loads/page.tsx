@@ -14,7 +14,11 @@ import {
 import { api, dateLabel, errorMessage, price } from "@/lib/api";
 import type { Load } from "@/lib/types";
 import { Empty, ErrorBox, Loading, Protected } from "@/components/ui";
+import { useSession } from "@/components/session";
+import { DriverLoads } from "@/components/driver-loads";
 export default function MyLoads() {
+  const { user } = useSession();
+  if (user?.role === "driver") return <DriverLoads />;
   return (
     <Protected>
       <Content />

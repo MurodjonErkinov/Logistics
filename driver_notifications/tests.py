@@ -68,15 +68,15 @@ class DriverTests(TestCase):
         self.load.price_amount=None
         self.assertIsNone(evaluate(ticket,self.load)["checks"]["price"])
 
-    def test_any_two_accepts_wrong_route_and_flags_overweight(self):
+    def test_route_is_required_even_for_any_two(self):
         ticket=self.ticket()
         self.load.origin="Nukus"
         self.load.weight_tons=25
         result=evaluate(ticket,self.load)
-        self.assertIsNotNone(result)
-        self.assertFalse(result["checks"]["route"])
-        self.assertFalse(result["checks"]["capacity"])
-        self.assertEqual(result["level"], "partial")
+        self.assertIsNone(result)
+        self.load.origin="Toshkent"
+        self.assertFalse(evaluate(ticket, self.load)["checks"]["capacity"])
+        self.load.origin="Nukus"
         ticket.match_mode="route"
         self.assertIsNone(evaluate(ticket,self.load))
 
@@ -91,7 +91,7 @@ class DriverTests(TestCase):
 
     def test_radius_needs_coordinates_and_calculates_distance(self):
         ticket=self.ticket(origins=[{"name":"Toshkent","lat":41.3,"lon":69.2,"radius_km":50}])
-        self.assertIsNone(evaluate(ticket,self.load)["checks"]["route"])
+        self.assertIsNone(evaluate(ticket,self.load))
         self.load.origin_lat=41.31; self.load.origin_lon=69.21
         ticket.current_location={"name":"GPS","lat":41.3,"lon":69.2}
         result=evaluate(ticket,self.load)
@@ -156,11 +156,32 @@ class DriverTests(TestCase):
         TelegramAccount.objects.create(owner=self.driver,chat_id=123)
         pref=Preference.objects.create(owner=self.driver,partial_interval_minutes=30)
         ticket=self.ticket(); self.load.price_amount=None; self.load.save(); scan_ticket(ticket.pk)
-        deliver(); send.assert_not_called()
-        Notification.objects.update(deliver_after=timezone.now()-timedelta(seconds=1))
         deliver(); self.assertEqual(send.call_count,1)
         deliver(); self.assertEqual(send.call_count,1)
         self.assertIsNotNone(Notification.objects.first().sent_at)
+
+    @patch.dict("os.environ", {"PUBLIC_SITE_URL": "https://example.uz/logistics"})
+    @patch("driver_notifications.delivery.call", return_value={"message_id": 22})
+    def test_load_notification_includes_contacts_links_and_keeps_menu(self, send):
+        from telegram_import.models import TelegramLoad, TelegramPost
+
+        account = TelegramAccount.objects.create(owner=self.driver, chat_id=123, ui={"actions": {"Menyu": "nav:menu"}})
+        self.load.alternate_phone = "901234567"
+        self.load.notes = "Ombordan olinadi"
+        self.load.origin_lat, self.load.origin_lon = 41.3, 69.2
+        self.load.save()
+        post = TelegramPost.objects.create(chat_id=-1001234, message_id=91, group_name="@loads", text="Yuk", posted_at=timezone.now(), expires_at=timezone.now()+timedelta(days=1), status="imported")
+        TelegramLoad.objects.create(post=post, position=1, load=self.load, status="imported", expires_at=post.expires_at)
+        ticket = self.ticket()
+        scan_ticket(ticket.pk)
+        deliver()
+        message = send.call_args.kwargs
+        self.assertNotIn("reply_markup", message)
+        for part in ("938086599", "901234567", "Ombordan olinadi", "Ташкент", "Самарканд", "Тент", "https://t.me/loads/91", f"https://example.uz/logistics/loads/{self.load.pk}", "google.com/maps/search/"):
+            self.assertIn(part, message["text"])
+        account.refresh_from_db()
+        self.assertEqual(account.ui["actions"], {"Menyu": "nav:menu"})
+        self.assertEqual(Notification.objects.get(kind="match").message_id, 22)
 
     @patch("driver_notifications.delivery.call", side_effect=BotError(429,120))
     def test_telegram_failure_does_not_lose_site_notification(self, send):

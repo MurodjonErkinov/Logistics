@@ -10,7 +10,7 @@ export function proxy(request: NextRequest) {
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self'${development ? " ws: wss:" : ""}`,
-    "frame-src https://yandex.com",
+    "frame-src https://yandex.com https://www.openstreetmap.org",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

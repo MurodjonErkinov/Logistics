@@ -37,6 +37,9 @@ export type Load = {
   source_url: string | null;
   created_at: string;
   updated_at: string;
+  claim_count?: number;
+  is_claimed?: boolean;
+  claimed_at?: string | null;
 };
 export type Company = {
   id: number;
