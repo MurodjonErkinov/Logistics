@@ -52,6 +52,19 @@ class VehicleSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "kind", "size_class", "capacity_tons", "volume_m3", "plate"]
 
 
+class SimpleTicketInput(serializers.Serializer):
+    title = serializers.CharField(max_length=120)
+    vehicle = serializers.PrimaryKeyRelatedField(queryset=Vehicle.objects.all())
+    origins = PlaceSerializer(many=True, min_length=1, max_length=10)
+    destinations = PlaceSerializer(many=True, max_length=10, default=list)
+    route_mode = serializers.ChoiceField(choices=("alternatives", "anywhere"), default="alternatives")
+
+    def validate_vehicle(self, vehicle):
+        if vehicle.owner_id != self.context["request"].user.pk:
+            raise serializers.ValidationError("Choose your own vehicle.")
+        return vehicle
+
+
 class TicketSerializer(serializers.ModelSerializer):
     origins = PlaceSerializer(many=True)
     destinations = PlaceSerializer(many=True)

@@ -2766,6 +2766,410 @@ td select {
     padding: 23px;
   }
 }
+.simple-ticket-wizard {
+  max-width: 760px;
+  margin: 0 0 28px;
+  background: #fff;
+  border: 1px solid #dfe7d8;
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 8px 30px #254f4005;
+}
+.simple-ticket-header {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  padding: 24px 30px;
+  background: #f4f8ee;
+  border-bottom: 1px solid #e5ecdd;
+}
+.simple-ticket-header > div {
+  flex: 1;
+}
+.simple-ticket-header .eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.7px;
+}
+.simple-ticket-header h2 {
+  font-size: 20px;
+  margin-top: 5px;
+  letter-spacing: -0.5px;
+}
+.simple-ticket-mark {
+  display: grid;
+  place-items: center;
+  background: #e5eed6;
+  color: #57793f;
+  width: 45px;
+  height: 45px;
+  border-radius: 14px;
+}
+.simple-ticket-steps {
+  display: flex;
+  margin: 0;
+  list-style: none;
+  padding: 23px 30px;
+  border-bottom: 1px solid #edf1e8;
+  gap: 14px;
+}
+.simple-ticket-steps li {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 7px;
+  color: #a1ac98;
+}
+.simple-ticket-steps li > span {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 50%;
+  background: #f0f3eb;
+  flex-shrink: 0;
+}
+.simple-ticket-steps small {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.simple-ticket-steps .current {
+  color: #254f40;
+  font-weight: 700;
+}
+.simple-ticket-steps .current > span {
+  color: white;
+  background: #254f40;
+}
+.simple-ticket-steps .complete > span {
+  background: #e8f0dc;
+  color: #607e48;
+}
+.simple-ticket-body {
+  padding: 30px;
+}
+.simple-ticket-question {
+  margin-bottom: 25px;
+}
+.simple-ticket-question > span {
+  font-size: 11px;
+  color: #91a17f;
+  letter-spacing: 1px;
+}
+.simple-ticket-question h3 {
+  font-size: 25px;
+  letter-spacing: -0.7px;
+  margin: 9px 0;
+  line-height: 1.4;
+}
+.simple-ticket-question h3:focus {
+  outline: none;
+}
+.simple-ticket-question p {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #8a9482;
+}
+.simple-ticket-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 27px;
+  padding-top: 22px;
+  border-top: 1px solid #edf1e8;
+}
+.simple-ticket-actions .button {
+  font-size: 13px;
+}
+.simple-ticket-vehicles {
+  display: grid;
+  gap: 11px;
+}
+.simple-ticket-vehicles > button {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  text-align: left;
+  width: 100%;
+  padding: 17px;
+  background: #fff;
+  border: 1px solid #e0e7d9;
+  border-radius: 13px;
+  color: #53713f;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.simple-ticket-vehicles > button:hover,
+.simple-ticket-vehicles > button.selected {
+  border-color: #93b373;
+  background: #f5f9ee;
+}
+.simple-ticket-vehicles > button > span:nth-child(2) {
+  flex: 1;
+}
+.simple-ticket-vehicles strong {
+  display: block;
+  font-size: 15px;
+  color: var(--ink);
+}
+.simple-ticket-vehicles small {
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+  color: #929c88;
+}
+.simple-ticket-vehicle-icon {
+  width: 43px;
+  height: 43px;
+  background: #f0f5e8;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+.simple-ticket-vehicles > button.simple-ticket-add-vehicle {
+  justify-content: center;
+  border-style: dashed;
+  font-size: 12px;
+}
+.simple-ticket-city-group {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+.simple-ticket-city-group > legend {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.simple-ticket-picked {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 16px;
+}
+.simple-ticket-picked:empty {
+  display: none;
+}
+.simple-ticket-picked > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f6f9f0;
+  border: 1px solid #e7eedc;
+  border-radius: 11px;
+  padding: 11px;
+}
+.simple-ticket-picked > div > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.simple-ticket-city-number {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  background: #e4eed5;
+  font-size: 10px;
+  color: #63834b;
+  flex-shrink: 0;
+}
+.simple-ticket-picked strong {
+  font-size: 13px;
+  display: block;
+  overflow-wrap: anywhere;
+}
+.simple-ticket-picked small {
+  display: block;
+  font-size: 10px;
+  color: #8e9a83;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.simple-ticket-add-place {
+  margin-top: 12px;
+}
+.simple-ticket-anywhere {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 19px;
+  margin-top: 23px;
+  text-align: left;
+  color: #50743c;
+  background: #f1f6e8;
+  border: 1px solid #dce7cc;
+  border-radius: 14px;
+}
+.simple-ticket-anywhere > span:nth-child(2) {
+  flex: 1;
+}
+.simple-ticket-anywhere strong {
+  display: block;
+  font-size: 14px;
+}
+.simple-ticket-anywhere small {
+  display: block;
+  margin-top: 5px;
+  color: #8f9d80;
+  font-size: 11px;
+}
+.simple-ticket-anywhere:hover {
+  background: #e9f1dc;
+}
+.simple-ticket-sync {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #8d9a81;
+  font-size: 10px;
+  line-height: 1.8;
+  margin-top: 19px;
+}
+.simple-ticket-sync svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #7a9b5c;
+}
+.simple-ticket-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: #8c9881;
+  font-size: 10px;
+  padding-top: 12px;
+  margin-top: 13px;
+  border-top: 1px solid #f0f3eb;
+}
+@media (max-width: 600px) {
+  .simple-ticket-header {
+    padding: 20px;
+  }
+  .simple-ticket-body {
+    padding: 22px 19px;
+  }
+  .simple-ticket-steps {
+    gap: 8px;
+    padding: 17px 19px;
+  }
+  .simple-ticket-steps li {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+  }
+  .simple-ticket-steps small {
+    font-size: 9px;
+  }
+  .simple-ticket-question h3 {
+    font-size: 22px;
+  }
+  .simple-ticket-question p {
+    font-size: 12px;
+  }
+  .simple-ticket-actions {
+    gap: 8px;
+  }
+  .simple-ticket-actions .button {
+    padding: 12px;
+    font-size: 12px;
+  }
+}
+.city-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+}
+.city-input > input {
+  width: 100%;
+}
+.city-input-spinner {
+  position: absolute;
+  right: 12px;
+  top: calc(50% - 8px);
+  color: #7b925e;
+  pointer-events: none;
+}
+.city-popup {
+  position: fixed;
+  z-index: 10000;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #fff;
+  border: 1px solid #dce5d4;
+  border-radius: 14px;
+  box-shadow: 0 14px 40px #193d3526;
+  padding: 5px;
+  color: #213b34;
+  font-family: Manrope, Arial, sans-serif;
+}
+.city-popup-caption {
+  padding: 9px 11px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a9781;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+.city-option {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  padding: 11px;
+  color: #6e855b;
+  cursor: pointer;
+}
+.city-option.active,
+.city-option:hover {
+  background: #eff5e7;
+}
+.city-option > svg {
+  flex-shrink: 0;
+}
+.city-option > span {
+  flex: 1;
+  min-width: 0;
+}
+.city-option strong {
+  display: block;
+  font-size: 14px;
+  color: #254f40;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.city-option small {
+  display: block;
+  font-size: 11px;
+  color: #88917f;
+  margin-top: 4px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.city-popup-message {
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 10px 11px;
+  color: #87927e;
+}
+.city-popup-credit {
+  border-top: 1px solid #edf0e9;
+  padding: 8px 11px 4px;
+  font-size: 9px;
+  color: #9ba491;
+}
+.search-field .city-input {
+  width: 0;
+}
 .driver-loads-page {
   max-width: 1400px;
   margin: 0 auto;
@@ -3264,99 +3668,6 @@ td select {
   margin-top: 22px;
   overflow: hidden;
 }
-.route-map-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  padding: 24px;
-}
-.route-map-heading h3 {
-  margin-top: 8px;
-  font-size: 19px;
-  letter-spacing: -0.6px;
-}
-.route-map-heading > svg {
-  color: #789361;
-}
-.route-map-tabs {
-  display: flex;
-  margin: 0 24px 20px;
-  padding: 5px;
-  gap: 5px;
-  background: #f2f5ed;
-  border-radius: 13px;
-}
-.route-map-tabs button {
-  width: 50%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px;
-  background: transparent;
-  text-align: left;
-  color: #89947d;
-  border-radius: 9px;
-}
-.route-map-tabs button.active {
-  background: white;
-  color: var(--green);
-  box-shadow: 0 2px 7px #254f4009;
-}
-.route-map-tabs span {
-  font-size: 13px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-.route-map-tabs small {
-  display: block;
-  font-size: 9px;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-.load-map {
-  height: 330px;
-  background: #eaf0e3;
-}
-.map-unavailable {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 30px;
-  text-align: center;
-  color: #879477;
-  font-size: 13px;
-}
-.load-route-map-panel .load-map iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-}
-.route-map-footer {
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-}
-.route-map-footer p {
-  font-size: 10px;
-  color: #8a9482;
-  line-height: 1.7;
-}
-.route-map-footer a {
-  flex-shrink: 0;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #53743e;
-}
 @media (max-width: 1100px) {
   .haul-hero-visual {
     width: 200px;
@@ -3424,16 +3735,6 @@ td select {
   }
   .route-map-heading {
     padding: 20px;
-  }
-  .route-map-tabs {
-    margin: 0 16px 16px;
-  }
-  .route-map-footer {
-    padding: 16px;
-    flex-wrap: wrap;
-  }
-  .load-map {
-    height: 270px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3808,9 +4109,18 @@ html[lang="ru"] .market-stats > div > span:last-child {
   margin: 8px 0 0;
   overflow-wrap: anywhere;
 }
+.route-map-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px 17px;
+  font-size: 12px;
+  color: #859579;
+  line-height: 1.7;
+}
 .route-map-panel iframe {
   width: 100%;
-  height: 390px;
+  height: 460px;
   border: 0;
   display: block;
   background: #ecf0e7;
@@ -3910,7 +4220,7 @@ html[lang="ru"] .market-stats > div > span:last-child {
     margin-left: 0;
   }
   .route-map-panel iframe {
-    height: 320px;
+    height: 390px;
   }
   .workspace-section-heading h2 {
     font-size: 16px;

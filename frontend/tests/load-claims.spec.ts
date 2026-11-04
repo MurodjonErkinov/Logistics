@@ -118,31 +118,21 @@ test("driver confirms contact, takes a load and opens its map and updated driver
   await expect(page.locator(".claim-activity strong")).toHaveText(
     "4 boshqa haydovchi",
   );
-  await page.getByRole("tab", { name: /Tushirish.*Namangan/ }).click();
-  await expect(
-    page.getByRole("tab", { name: /Tushirish.*Namangan/ }),
-  ).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator(".load-map iframe")).toHaveAttribute(
+  await expect(page.locator(".route-map-panel iframe")).toHaveAttribute(
     "src",
-    /marker=40.99,71.67/,
+    /yandex\.com\/map-widget\/v1\/\?rtext=Toshkent%7ENamangan&rtt=auto/,
   );
   await expect(
-    page.getByRole("link", { name: "Yo‘lni ochish" }),
-  ).toHaveAttribute("href", /origin=Toshkent&destination=Namangan/);
+    page.getByRole("link", { name: "Xaritada ochish" }),
+  ).toHaveAttribute(
+    "href",
+    /yandex\.com\/maps\/\?rtext=Toshkent%7ENamangan&rtt=auto/,
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await page
     .locator(".claim-panel")
     .screenshot({ path: "test-results/taken-load-mobile.png" });
-  await page.locator(".load-map").scrollIntoViewIfNeeded();
-  await expect(
-    page
-      .frameLocator(".load-map iframe")
-      .getByRole("region", { name: "Map", exact: true }),
-  ).toBeVisible({ timeout: 20000 });
-  await page
-    .frameLocator(".load-map iframe")
-    .getByRole("button", { name: "Zoom In", exact: true })
-    .click();
+  await page.locator(".route-map-panel iframe").scrollIntoViewIfNeeded();
   await page
     .locator(".route-map-panel")
     .screenshot({ path: "test-results/load-map-mobile.png" });

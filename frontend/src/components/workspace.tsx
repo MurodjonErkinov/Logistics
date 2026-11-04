@@ -1,4 +1,5 @@
 "use client";
+import { CityInput } from "./city-input";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,6 +22,7 @@ import { useLocale } from "./locale";
 import { useSaved } from "./use-saved";
 import { Empty, ErrorBox, Field, Loading, Protected } from "./ui";
 import { RouteMap } from "./route-map";
+import { yandexRoutePoint } from "@/lib/yandex-maps";
 
 export function Workspace() {
   return (
@@ -198,9 +200,9 @@ function WorkspaceContent() {
         </div>
         <div className="workspace-filter-fields">
           <Field label={t("Qayerdan")}>
-            <input
+            <CityInput
               value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
+              onValueChange={setOrigin}
               placeholder={t("Shahar yoki viloyat")}
             />
           </Field>
@@ -215,9 +217,9 @@ function WorkspaceContent() {
             <ArrowDownUp size={19} />
           </button>
           <Field label={t("Qayerga")}>
-            <input
+            <CityInput
               value={destination}
-              onChange={(e) => setDestination(e.target.value)}
+              onValueChange={setDestination}
               placeholder={t("Shahar yoki viloyat")}
             />
           </Field>
@@ -351,6 +353,16 @@ function WorkspaceContent() {
               <RouteMap
                 origin={selected.origin}
                 destination={selected.destination}
+                originPoint={yandexRoutePoint(
+                  selected.origin,
+                  selected.origin_lat,
+                  selected.origin_lon,
+                )}
+                destinationPoint={yandexRoutePoint(
+                  selected.destination,
+                  selected.destination_lat,
+                  selected.destination_lon,
+                )}
               />
               <section className="workspace-contact">
                 <div>

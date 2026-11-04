@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { appPath } from "@/lib/paths";
 import { useLocale } from "./locale";
 import styles from "./quick-shipment.module.css";
+import { CityInput } from "./city-input";
 
 export function QuickShipment() {
   const { locale } = useLocale();
@@ -51,7 +52,7 @@ export function QuickShipment() {
           <label>
             <MapPin size={18} />
             {c("Qayerdan", "Откуда")}
-            <input
+            <CityInput
               name="origin"
               required
               pattern=".*\S.*"
@@ -63,7 +64,7 @@ export function QuickShipment() {
           <label>
             <MapPin size={18} />
             {c("Qayerga", "Куда")}
-            <input
+            <CityInput
               name="destination"
               required
               pattern=".*\S.*"

@@ -1,5 +1,8 @@
 export type Place = {
   name: string;
+  address?: string;
+  geocoded?: boolean;
+  source_url?: string;
   lat?: number | null;
   lon?: number | null;
   radius_km?: number;

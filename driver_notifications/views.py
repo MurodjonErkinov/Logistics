@@ -12,8 +12,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import MatchState, Notification, Preference, TelegramAccount, Ticket, Vehicle
-from .serializers import NotificationSerializer, PreferenceSerializer, TicketSerializer, VehicleSerializer
+from .serializers import NotificationSerializer, PreferenceSerializer, SimpleTicketInput, TicketSerializer, VehicleSerializer
 from .service import notify, scan_ticket
+from .ticket_flow import simple_ticket_payload
 
 
 class IsDriver(permissions.BasePermission):
@@ -51,6 +52,27 @@ class VehicleViewSet(OwnedViewSet):
 class TicketViewSet(OwnedViewSet):
     queryset = Ticket.objects.select_related("vehicle")
     serializer_class = TicketSerializer
+
+    def save_simple(self, request, instance=None):
+        form = SimpleTicketInput(data=request.data, context=self.get_serializer_context())
+        form.is_valid(raise_exception=True)
+        data = form.validated_data
+        payload = simple_ticket_payload(data["title"], data["vehicle"], data["origins"], data["destinations"], data["route_mode"] == "anywhere")
+        serializer = self.get_serializer(instance, data=payload)
+        serializer.is_valid(raise_exception=True)
+        if instance is None:
+            self.perform_create(serializer)
+        else:
+            self.perform_update(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if instance is None else status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="simple")
+    def simple_create(self, request):
+        return self.save_simple(request)
+
+    @action(detail=True, methods=["patch"], url_path="simple")
+    def simple_update(self, request, pk=None):
+        return self.save_simple(request, self.get_object())
 
     def perform_create(self, serializer):
         if Ticket.objects.filter(owner=self.request.user, status__in=["active", "paused"]).count() >= 20:

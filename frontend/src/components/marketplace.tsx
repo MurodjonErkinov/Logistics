@@ -1,4 +1,5 @@
 "use client";
+import { CityInput } from "./city-input";
 import { useLocale } from "@/components/locale";
 
 import Link from "next/link";
@@ -271,11 +272,11 @@ export function Marketplace({ onlySaved = false }: { onlySaved?: boolean }) {
               <span>{t("Qayerdan")}</span>
               <div>
                 <Circle size={16} />
-                <input
+                <CityInput
                   aria-label={t("Qayerdan")}
                   placeholder={t("Shahar yoki viloyat")}
                   value={draft.origin}
-                  onChange={(e) => change("origin", e.target.value)}
+                  onValueChange={(value) => change("origin", value)}
                 />
               </div>
             </label>
@@ -297,11 +298,11 @@ export function Marketplace({ onlySaved = false }: { onlySaved?: boolean }) {
               <span>{t("Qayerga")}</span>
               <div>
                 <MapPin size={17} />
-                <input
+                <CityInput
                   aria-label={t("Qayerga")}
                   placeholder={t("Shahar yoki viloyat")}
                   value={draft.destination}
-                  onChange={(e) => change("destination", e.target.value)}
+                  onValueChange={(value) => change("destination", value)}
                 />
               </div>
             </label>

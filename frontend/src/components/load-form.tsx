@@ -18,6 +18,7 @@ import { api, errorMessage } from "@/lib/api";
 import type { Company, Load } from "@/lib/types";
 import { ErrorBox, Field, Loading, Protected } from "./ui";
 import { useSession } from "./session";
+import { CityInput } from "./city-input";
 
 export function LoadForm({ id }: { id?: string }) {
   return (
@@ -65,6 +66,12 @@ function Form({ id }: { id?: string }) {
   }, [id]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [load, setLoad] = useState<Load | null>(null);
+  const [coordinates, setCoordinates] = useState({
+    origin_lat: "",
+    origin_lon: "",
+    destination_lat: "",
+    destination_lon: "",
+  });
   const [negotiable, setNegotiable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(Boolean(id));
@@ -77,6 +84,12 @@ function Form({ id }: { id?: string }) {
       api<Load>(`cargo/loads/${id}/`)
         .then((value) => {
           setLoad(value);
+          setCoordinates({
+            origin_lat: value.origin_lat ?? "",
+            origin_lon: value.origin_lon ?? "",
+            destination_lat: value.destination_lat ?? "",
+            destination_lon: value.destination_lon ?? "",
+          });
           setNegotiable(value.is_price_negotiable);
         })
         .catch((e) => setError(errorMessage(e)))
@@ -180,23 +193,51 @@ function Form({ id }: { id?: string }) {
             </h2>
             <div className="form-row">
               <Field label={t("Qayerdan *")}>
-                <input
+                <CityInput
                   name="origin"
                   required
                   maxLength={150}
                   key={`origin-${draft.origin}`}
                   defaultValue={load?.origin ?? draft.origin}
                   placeholder={t("Masalan, Andijon")}
+                  onValueChange={() =>
+                    setCoordinates((c) => ({
+                      ...c,
+                      origin_lat: "",
+                      origin_lon: "",
+                    }))
+                  }
+                  onSelectCity={(city) =>
+                    setCoordinates((c) => ({
+                      ...c,
+                      origin_lat: city.lat.toFixed(7),
+                      origin_lon: city.lon.toFixed(7),
+                    }))
+                  }
                 />
               </Field>
               <Field label={t("Qayerga *")}>
-                <input
+                <CityInput
                   name="destination"
                   required
                   maxLength={150}
                   key={`destination-${draft.destination}`}
                   defaultValue={load?.destination ?? draft.destination}
                   placeholder={t("Masalan, Namangan")}
+                  onValueChange={() =>
+                    setCoordinates((c) => ({
+                      ...c,
+                      destination_lat: "",
+                      destination_lon: "",
+                    }))
+                  }
+                  onSelectCity={(city) =>
+                    setCoordinates((c) => ({
+                      ...c,
+                      destination_lat: city.lat.toFixed(7),
+                      destination_lon: city.lon.toFixed(7),
+                    }))
+                  }
                 />
               </Field>
             </div>
@@ -322,7 +363,13 @@ function Form({ id }: { id?: string }) {
                       step="any"
                       min={index % 2 === 0 ? -90 : -180}
                       max={index % 2 === 0 ? 90 : 180}
-                      defaultValue={load?.[key] ?? ""}
+                      value={coordinates[key]}
+                      onChange={(event) =>
+                        setCoordinates((c) => ({
+                          ...c,
+                          [key]: event.target.value,
+                        }))
+                      }
                     />
                   </Field>
                 ))}

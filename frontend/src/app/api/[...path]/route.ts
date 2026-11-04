@@ -1,4 +1,5 @@
 import { cookiePath } from "@/lib/paths";
+import { isAllowedApiRoute } from "@/lib/api-route-policy";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -64,11 +65,7 @@ async function handle(
 ) {
   const { path } = await context.params;
   const route = path.join("/");
-  if (
-    !/^(auth\/(login|register|registration-code|password-reset-code|reset-password|logout|me|users(?:\/\d+)?)|cargo\/loads(?:\/\d+)?|driver\/(?:vehicles(?:\/\d+)?|tickets(?:\/\d+(?:\/return-trip)?)?|notifications(?:\/(?:unread|read-all|\d+(?:\/(?:read|dismiss))?))?|preferences)|partners\/(?:companies(?:\/\d+(?:\/members(?:\/\d+)?)?)?|invitations(?:\/\d+(?:\/accept)?)?))$/.test(
-      route,
-    )
-  ) {
+  if (!isAllowedApiRoute(route)) {
     return NextResponse.json({ detail: "Sahifa topilmadi." }, { status: 404 });
   }
   if (

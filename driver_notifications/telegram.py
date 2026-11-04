@@ -326,24 +326,13 @@ def ticket_state():
 
 
 def save_ticket(account):
+    from .ticket_flow import simple_ticket_payload
     state = account.state
     data = state["data"]
     vehicle = Vehicle.objects.filter(pk=data.get("vehicle"), owner=account.owner).first()
     if vehicle is None:
         raise ValidationError("O‘zingizga tegishli mashinani tanlang.")
-    now = timezone.now()
-    # Every hidden search option has a predictable default in the short bot flow.
-    fields = ("name", "lat", "lon", "source_url", "address", "geocoded")
-    places = {key: [{k: v for k, v in p.items() if k in fields} for p in data.get(key, [])] for key in ("origins", "destinations")}
-    payload = {
-        "title": data.get("title", ""), "vehicle": vehicle.pk, **places,
-        "route_mode": "anywhere" if data.get("route_mode") == "anywhere" else "alternatives",
-        "current_location": places["origins"][0] if places["origins"] else {},
-        "ready_at": now.isoformat(), "expires_at": (now + timedelta(days=7)).isoformat(),
-        "available_tons": str(vehicle.capacity_tons), "status": "active", "waypoints": [],
-        "partial_load": False, "min_price": "0", "currency": "UZS", "price_basis": "trip",
-        "match_mode": "route", "notes": "",
-    }
+    payload = simple_ticket_payload(data.get("title", ""), vehicle, data.get("origins", []), data.get("destinations", []), data.get("route_mode") == "anywhere")
     with transaction.atomic():
         instance = Ticket.objects.filter(pk=state.get("instance"), owner=account.owner).first()
         if state.get("instance") and instance is None:

@@ -1,24 +1,29 @@
 "use client";
-import { ExternalLink, MapPinned } from "lucide-react";
+import { Clock3, ExternalLink, MapPinned } from "lucide-react";
 import { useLocale } from "./locale";
+import { yandexRouteUrls } from "@/lib/yandex-maps";
 
 export function RouteMap({
   origin,
   destination,
+  originPoint,
+  destinationPoint,
+  className = "",
 }: {
   origin: string;
   destination: string;
+  originPoint?: string;
+  destinationPoint?: string;
+  className?: string;
 }) {
   const { t, locale } = useLocale();
-  const params = new URLSearchParams({
-    rtext: `${origin.replaceAll("~", " ")}~${destination.replaceAll("~", " ")}`,
-    rtt: "auto",
-    mode: "routes",
-    lang: locale === "ru" ? "ru_RU" : "en_US",
-  });
-  const route = `https://yandex.com/maps/?${params}`;
+  const { embed, external } = yandexRouteUrls(
+    originPoint ?? origin,
+    destinationPoint ?? destination,
+    locale,
+  );
   return (
-    <section className="route-map-panel">
+    <section className={`route-map-panel ${className}`}>
       <div className="route-map-heading">
         <div>
           <span className="eyebrow">{t("YO‘NALISH XARITASI")}</span>
@@ -28,7 +33,7 @@ export function RouteMap({
           </h2>
         </div>
         <a
-          href={route}
+          href={external}
           target="_blank"
           rel="noopener noreferrer"
           className="button secondary small-button"
@@ -37,10 +42,14 @@ export function RouteMap({
           <ExternalLink size={15} />
         </a>
       </div>
+      <div className="route-map-info">
+        <Clock3 size={15} />
+        {t("Yo‘l masofasi va taxminiy vaqtni xaritada ko‘ring.")}
+      </div>
       <iframe
-        key={`${origin}-${destination}-${locale}`}
+        key={embed}
         title={`${t("Yo‘nalish")}: ${origin} → ${destination}`}
-        src={`https://yandex.com/map-widget/v1/?${params}`}
+        src={embed}
         loading="lazy"
         referrerPolicy="no-referrer"
         allowFullScreen

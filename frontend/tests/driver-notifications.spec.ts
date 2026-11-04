@@ -73,22 +73,27 @@ test("driver creates vehicle and multi-destination ticket, sees bell and manages
   ).toBeVisible();
   await page.getByRole("button", { name: "Tiket ochish", exact: true }).click();
   await page.getByLabel("Tiket nomi", { exact: true }).fill("Ikki yo‘nalish");
+  await page.getByRole("button", { name: "Davom etish", exact: true }).click();
+  await page
+    .locator(".simple-ticket-vehicles")
+    .getByRole("button", { name: /Volvo test/ })
+    .click();
   const origins = page.getByRole("group", {
     name: "Yuklash joylari",
     exact: true,
   });
-  await origins.getByLabel("Shahar 1", { exact: true }).fill("Toshkent");
+  await origins.getByLabel("Shahar", { exact: true }).fill("Toshkent");
+  await page.getByRole("button", { name: "Davom etish", exact: true }).click();
   const destinations = page.getByRole("group", {
     name: "Boradigan manzillar",
     exact: true,
   });
-  await destinations.getByLabel("Shahar 1", { exact: true }).fill("Samarqand");
+  await destinations.getByLabel("Shahar", { exact: true }).fill("Samarqand");
   await destinations.getByRole("button", { name: "Manzil qo‘shish" }).click();
-  await destinations.getByLabel("Shahar 2", { exact: true }).fill("Buxoro");
-  await expect(page.getByLabel("Qachon xabar berilsin?")).toHaveValue(
-    "any_two",
-  );
-  await page.getByRole("button", { name: "Tiketni saqlash" }).click();
+  await destinations.getByLabel("Shahar", { exact: true }).fill("Buxoro");
+  await page
+    .getByRole("button", { name: "Tiketni ochish", exact: true })
+    .click();
   await expect(
     page
       .locator(".ticket-card")
